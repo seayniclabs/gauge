@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import httpx
@@ -39,10 +40,29 @@ class SendApproval(BaseModel):
     send: bool = Field(description="Send this email now?")
 
 
+_ADDR = re.compile(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}")
+
+
+def _address(value: str, field: str) -> str:
+    """One bare addr-spec, lower-cased, or an error. No display names, lists, comments or control chars,
+    so the address we check is exactly the address we send to."""
+    v = value.strip()
+    if not _ADDR.fullmatch(v):
+        raise GaugeError("resend", "bad_address", f"{field} {value!r} is not a single plain email address.",
+                         "pass each address on its own, like name@example.com, with no display name.")
+    return v.lower()
+
+
 def _allowed(address: str, allowlist: list[str]) -> bool:
-    address = address.strip().lower()
     domain = address.rsplit("@", 1)[-1]
     return any(a == address or a == f"@{domain}" for a in allowlist)
+
+
+def _excerpt(value: str | None, limit: int = 600) -> str:
+    if not value:
+        return "(none)"
+    shown = value if len(value) <= limit else value[:limit] + "…"
+    return f"{shown!r} ({len(value)} characters)"
 
 
 def _can_ask_person(ctx: Context) -> bool:
@@ -137,6 +157,10 @@ class ResendModule(Module):
                 raise GaugeError("resend", "bad_input", "at least one recipient is required.")
             if not (text or html):
                 raise GaugeError("resend", "bad_input", "provide text, html, or both.")
+            if any(ord(c) < 32 for c in subject):
+                raise GaugeError("resend", "bad_input", "subject contains control characters.")
+            to = [_address(r, "recipient") for r in to]
+            reply_to = _address(reply_to, "reply_to") if reply_to else None
             address = module.require(config, "from")["from"]
             name = config.get("resend", "from_name")
             draft = EmailDraft(sender=f"{name} <{address}>" if name else address, to=to, subject=subject,
@@ -156,7 +180,15 @@ class ResendModule(Module):
             elif allowlist and not outside:
                 approved_by = "allowlist"
             elif _can_ask_person(ctx):
-                summary = f"Send email from {draft.sender} to {', '.join(to)}, subject: {subject!r}?"
+                summary = "\n".join([
+                    "Send this email?",
+                    f"From: {draft.sender!r}",
+                    f"To: {', '.join(repr(r) for r in to)}",
+                    f"Reply-To: {reply_to!r}" if reply_to else "Reply-To: (none)",
+                    f"Subject: {subject!r}",
+                    f"Text: {_excerpt(text)}",
+                    f"HTML: {_excerpt(html)}",
+                ])
                 answer = await ctx.elicit(summary, SendApproval)
                 if answer.action != "accept" or not answer.data.send:
                     return SendResult(sent=False, draft=draft, note="The person declined. Nothing was sent.")

@@ -238,6 +238,16 @@ def test_resend_allowlist_blocks_other_recipients():
     assert seen == []
 
 
+@pytest.mark.parametrize("bad", ["x@evil.test, a@example.com", "Name <a@example.com>", "a@example.com\nbcc:x@evil.test",
+                                 "a@example.com;x@evil.test", "not-an-address"])
+def test_resend_rejects_anything_but_one_plain_address(bad):
+    seen = []
+    env = {**RESEND, "GAUGE_RESEND_ALLOWED_RECIPIENTS": "@example.com"}
+    with pytest.raises(Exception) as err:
+        call(server(env, send_handler(seen)), "resend_send", to=[bad], subject="Hi", text="Hello", confirm=True)
+    assert "bad_address" in str(err.value) and seen == []
+
+
 def test_resend_require_confirm_false_lets_assistant_send():
     seen = []
     out = call(server({**RESEND, "GAUGE_RESEND_REQUIRE_CONFIRM": "false"}, send_handler(seen)), "resend_send",
@@ -267,7 +277,9 @@ def send_via_client(answer):
 def test_resend_person_approves_through_the_client():
     out, seen, asked = send_via_client(True)
     assert out["sent"] is True and out["approved_by"] == "person" and len(seen) == 1
-    assert "a@example.com" in asked[0]
+    # The person sees everything that will be sent, not just the subject.
+    for part in ("a@example.com", "Subject: 'Hi'", "Text: 'Hello'", "HTML: (none)", "Reply-To:"):
+        assert part in asked[0]
 
 
 def test_resend_person_declines_through_the_client():
