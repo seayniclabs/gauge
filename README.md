@@ -37,7 +37,8 @@ Set these as environment variables in your MCP client's config, or put them in a
 | `GAUGE_RESEND_API_KEY` | resend | Resend API key |
 | `GAUGE_RESEND_FROM` | resend | Sender address on a domain you verified in Resend |
 | `GAUGE_RESEND_FROM_NAME` | resend | Optional sender display name |
-| `GAUGE_RESEND_REQUIRE_CONFIRM` | resend | `true` by default: sending returns a preview until the assistant calls again with `confirm=true` |
+| `GAUGE_RESEND_ALLOWED_RECIPIENTS` | resend | Optional. Comma-separated addresses or `@domains` the assistant may send to without asking you each time, e.g. `me@example.com,@example.com` |
+| `GAUGE_RESEND_REQUIRE_CONFIRM` | resend | `true` by default: you approve each send. `false` lets the assistant send on its own. |
 | `GAUGE_<MODULE>_ENABLED` | any | `false` turns a module off, e.g. `GAUGE_RESEND_ENABLED=false` |
 
 **Config file (optional).** Gauge also reads `~/.config/gauge/config.toml`, or the file named by `GAUGE_CONFIG`. Environment variables win over the file.
@@ -99,7 +100,7 @@ It serves streamable HTTP at `http://127.0.0.1:8765/mcp`. It listens only on you
 | `umami_stats` | Pageviews, visitors, visits, bounces and bounce rate for a date range |
 | `umami_pageviews` | Pageviews and sessions over time |
 | `umami_metrics` | A ranked breakdown: `type` = `path` (top pages), `referrer`, `country`, `browser`, `os`, `device` and more |
-| `resend_send` | Sends an email. Returns a preview unless called with `confirm=true`. |
+| `resend_send` | Sends an email after you approve it. Without `confirm=true` it only returns a preview. |
 | `resend_emails` | Sent emails, paged with a cursor |
 | `resend_domains` | Sending domains and whether each is verified |
 
@@ -108,7 +109,8 @@ Every tool returns structured data with a published schema, so an assistant can 
 ## Safety
 
 - Gauge only calls the services you configure. It sends nothing anywhere else and keeps no data.
-- `resend_send` sends real email. By default it shows a preview first, so a person can check recipients and content before anything goes out.
+- `resend_send` sends real email, so **you** approve each one, not the assistant. When the assistant asks to send, Gauge asks you directly through your MCP client (MCP elicitation) and shows the sender, recipients and subject. The assistant can't answer that question for you.
+- Some MCP clients can't ask you questions yet. In those, Gauge refuses to send unless you've pre-approved the recipients with `GAUGE_RESEND_ALLOWED_RECIPIENTS`, or turned approval off with `GAUGE_RESEND_REQUIRE_CONFIRM=false`.
 - Give Gauge the least access it needs: a view-only Umami user, and a Resend key limited to sending if you don't need the other email tools.
 
 ## Develop
@@ -120,4 +122,4 @@ uv venv && uv pip install -e '.[dev]'
 
 ## License
 
-To be decided before the first public release.
+MIT. Published by Seaynic Labs.

@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..config import Config
 from ..errors import GaugeError
@@ -31,7 +31,26 @@ class SendResult(BaseModel):
     sent: bool
     id: str | None = None
     draft: EmailDraft
+    approved_by: str | None = None  # "person" (asked directly), "allowlist", or "settings"
     note: str | None = None
+
+
+class SendApproval(BaseModel):
+    send: bool = Field(description="Send this email now?")
+
+
+def _allowed(address: str, allowlist: list[str]) -> bool:
+    address = address.strip().lower()
+    domain = address.rsplit("@", 1)[-1]
+    return any(a == address or a == f"@{domain}" for a in allowlist)
+
+
+def _can_ask_person(ctx: Context) -> bool:
+    try:
+        caps = ctx.session.client_params.capabilities  # type: ignore[union-attr]
+    except (ValueError, AttributeError):
+        return False
+    return bool(caps and caps.elicitation)
 
 
 class SentEmail(BaseModel):
@@ -70,11 +89,13 @@ class ResendModule(Module):
                 Setting("from", "Sender address on a verified domain, e.g. hello@example.com. Needed to send.",
                         required=False),
                 Setting("from_name", "Display name for the sender, e.g. Example Team.", required=False),
-                Setting("require_confirm", "true (default): resend_send previews until called with confirm=true.",
-                        required=False),
+                Setting("allowed_recipients", "Comma-separated addresses or @domains the assistant may send to "
+                        "without asking each time, e.g. me@example.com,@example.com.", required=False),
+                Setting("require_confirm", "true (default): a person approves each send. false: the assistant "
+                        "sends on its own.", required=False),
             ],
             tools={
-                "resend_send": "Send an email. Returns a preview unless confirm=true.",
+                "resend_send": "Send an email. Preview first; a person approves before it goes out.",
                 "resend_emails": "List sent emails (cursor-paged).",
                 "resend_domains": "List sending domains and their verification status.",
             },
@@ -106,11 +127,12 @@ class ResendModule(Module):
 
         @mcp.tool(annotations=SENDS_EMAIL)
         async def resend_send(
-            to: list[str], subject: str, text: str | None = None, html: str | None = None,
+            ctx: Context, to: list[str], subject: str, text: str | None = None, html: str | None = None,
             reply_to: str | None = None, confirm: bool = False,
         ) -> SendResult:
-            """Send an email from the configured sender. Without confirm=true this only returns a preview,
-            so a person can check recipients and content first."""
+            """Send an email from the configured sender. Without confirm=true it only returns a preview.
+            With confirm=true the person is asked to approve it (unless the recipients are pre-approved
+            in settings); the assistant cannot approve on their behalf."""
             if not to:
                 raise GaugeError("resend", "bad_input", "at least one recipient is required.")
             if not (text or html):
@@ -119,15 +141,40 @@ class ResendModule(Module):
             name = config.get("resend", "from_name")
             draft = EmailDraft(sender=f"{name} <{address}>" if name else address, to=to, subject=subject,
                                text=text, html=html, reply_to=reply_to)
-            if config.flag("resend", "require_confirm", True) and not confirm:
-                return SendResult(sent=False, draft=draft,
-                                  note="Preview only. Call again with confirm=true to send.")
+            allowlist = [a.strip().lower() for a in (config.get("resend", "allowed_recipients") or "").split(",") if a.strip()]
+            outside = [r for r in to if not _allowed(r, allowlist)] if allowlist else []
+            if not confirm:
+                note = "Preview only. Call again with confirm=true; the person will be asked to approve it."
+                if outside:
+                    note = f"Preview only. Not in GAUGE_RESEND_ALLOWED_RECIPIENTS: {', '.join(outside)}."
+                return SendResult(sent=False, draft=draft, note=note)
+
+            # The approval must come from the person or their settings, never from the model's own arguments.
+            approved_by = None
+            if not config.flag("resend", "require_confirm", True):
+                approved_by = "settings"
+            elif allowlist and not outside:
+                approved_by = "allowlist"
+            elif _can_ask_person(ctx):
+                summary = f"Send email from {draft.sender} to {', '.join(to)}, subject: {subject!r}?"
+                answer = await ctx.elicit(summary, SendApproval)
+                if answer.action != "accept" or not answer.data.send:
+                    return SendResult(sent=False, draft=draft, note="The person declined. Nothing was sent.")
+                approved_by = "person"
+            else:
+                raise GaugeError(
+                    "resend", "approval_unavailable",
+                    "this MCP client cannot ask you to approve a send, and the recipients are not pre-approved.",
+                    "set GAUGE_RESEND_ALLOWED_RECIPIENTS to the addresses or @domains it may send to, or "
+                    "GAUGE_RESEND_REQUIRE_CONFIRM=false to let the assistant send on its own.",
+                )
+
             body = {"from": draft.sender, "to": to, "subject": subject}
             for k in ("text", "html", "reply_to"):
                 if getattr(draft, k):
                     body[k] = getattr(draft, k)
             data = await call("POST", "/emails", json=body)
-            return SendResult(sent=True, id=data.get("id"), draft=draft)
+            return SendResult(sent=True, id=data.get("id"), draft=draft, approved_by=approved_by)
 
         @mcp.tool(annotations=READ_ONLY)
         async def resend_emails(limit: int = 20, after: str | None = None) -> EmailPage:

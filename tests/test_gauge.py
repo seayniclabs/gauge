@@ -205,18 +205,74 @@ def test_resend_send_previews_without_confirm():
     assert out["draft"]["sender"] == "hello@example.com"
 
 
-def test_resend_send_with_confirm_posts():
-    seen = []
-
+def send_handler(seen):
     def handle(req):
         seen.append(req)
         return httpx.Response(200, json={"id": "em_1"})
-    env = {**RESEND, "GAUGE_RESEND_FROM_NAME": "Example"}
-    out = call(server(env, handle), "resend_send", to=["a@example.com"], subject="Hi", text="Hello", confirm=True)
-    assert out == {**out, "sent": True, "id": "em_1"}
+    return handle
+
+
+def test_resend_confirm_alone_cannot_send_without_a_person():
+    # The model passing confirm=true is not approval. With no way to ask the person, refuse.
+    seen = []
+    with pytest.raises(Exception) as err:
+        call(server(RESEND, send_handler(seen)), "resend_send", to=["a@example.com"], subject="Hi", text="Hello", confirm=True)
+    assert "approval_unavailable" in str(err.value) and seen == []
+
+
+def test_resend_allowlist_approves_listed_recipients():
+    seen = []
+    env = {**RESEND, "GAUGE_RESEND_FROM_NAME": "Example", "GAUGE_RESEND_ALLOWED_RECIPIENTS": "@example.com"}
+    out = call(server(env, send_handler(seen)), "resend_send", to=["a@example.com"], subject="Hi", text="Hello", confirm=True)
+    assert (out["sent"], out["id"], out["approved_by"]) == (True, "em_1", "allowlist")
     body = json.loads(seen[0].content)
     assert body["from"] == "Example <hello@example.com>" and body["to"] == ["a@example.com"]
     assert seen[0].headers["authorization"] == "Bearer re_test"
+
+
+def test_resend_allowlist_blocks_other_recipients():
+    seen = []
+    env = {**RESEND, "GAUGE_RESEND_ALLOWED_RECIPIENTS": "@example.com"}
+    with pytest.raises(Exception):
+        call(server(env, send_handler(seen)), "resend_send", to=["x@other.test"], subject="Hi", text="Hello", confirm=True)
+    assert seen == []
+
+
+def test_resend_require_confirm_false_lets_assistant_send():
+    seen = []
+    out = call(server({**RESEND, "GAUGE_RESEND_REQUIRE_CONFIRM": "false"}, send_handler(seen)), "resend_send",
+               to=["a@example.com"], subject="Hi", text="Hello", confirm=True)
+    assert out["approved_by"] == "settings" and len(seen) == 1
+
+
+def send_via_client(answer):
+    """Call resend_send through a real MCP client session that answers the approval prompt."""
+    from mcp.shared.memory import create_connected_server_and_client_session
+    from mcp.types import ElicitResult
+
+    seen, asked = [], []
+
+    async def on_elicit(context, params):
+        asked.append(params.message)
+        return ElicitResult(action="accept", content={"send": answer}) if answer is not None else ElicitResult(action="decline")
+
+    async def run():
+        async with create_connected_server_and_client_session(
+                server(RESEND, send_handler(seen)), elicitation_callback=on_elicit) as client:
+            r = await client.call_tool("resend_send", {"to": ["a@example.com"], "subject": "Hi", "text": "Hello", "confirm": True})
+            return r.structuredContent
+    return asyncio.run(run()), seen, asked
+
+
+def test_resend_person_approves_through_the_client():
+    out, seen, asked = send_via_client(True)
+    assert out["sent"] is True and out["approved_by"] == "person" and len(seen) == 1
+    assert "a@example.com" in asked[0]
+
+
+def test_resend_person_declines_through_the_client():
+    out, seen, _ = send_via_client(None)
+    assert out["sent"] is False and seen == []
 
 
 def test_resend_emails_pages_with_cursor():
