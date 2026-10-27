@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.seayniclabs/gauge",
+  "description": "Website analytics (Umami) and email (Resend) for an AI assistant, as one MCP bundle.",
+  "repository": {
+    "url": "https://github.com/seayniclabs/gauge",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "gauge-mcp",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        { "name": "GAUGE_UMAMI_URL", "description": "Your Umami address", "isRequired": false },
+        { "name": "GAUGE_UMAMI_USERNAME", "description": "Self-hosted Umami login", "isRequired": false },
+        { "name": "GAUGE_UMAMI_PASSWORD", "description": "Password for that login", "isRequired": false, "isSecret": true },
+        { "name": "GAUGE_UMAMI_API_KEY", "description": "Umami Cloud API key", "isRequired": false, "isSecret": true },
+        { "name": "GAUGE_RESEND_API_KEY", "description": "Resend API key", "isRequired": false, "isSecret": true },
+        { "name": "GAUGE_RESEND_FROM", "description": "Sender address on a verified domain", "isRequired": false }
+      ]
+    }
+  ]
+}

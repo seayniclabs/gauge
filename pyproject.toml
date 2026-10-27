@@ -1,0 +1,33 @@
+[project]
+name = "gauge-mcp"
+version = "0.1.0"
+description = "MCP bundle for people running a small website: web analytics (Umami) and email (Resend) in one server."
+readme = "README.md"
+requires-python = ">=3.11"
+# mcp is capped below 2: 2.x removed FastMCP, and unpinned installs crash.
+dependencies = [
+    "mcp[cli]>=1.27,<2",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+]
+keywords = ["mcp", "model-context-protocol", "umami", "resend", "analytics", "email"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+gauge-mcp = "gauge_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gauge_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
