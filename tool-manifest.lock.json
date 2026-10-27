@@ -1,0 +1,24 @@
+{
+  "bundle": "gauge",
+  "version": "0.2.0",
+  "entries": {
+    "instructions": "badd8ffb6c32c13b2a76d253266408fe82f4faead00ab2885c2001c2cad6a290",
+    "prompt:analytics": "6f5888f0265843b75d4f3b8558b9ce2c687fd0b72fa3b5e78c7006b26c975ce7",
+    "prompt:copywriting": "a0f799ecfb44b512c7047044530da248b27b9eda4c7630f82100326cead6d9c5",
+    "prompt:email-best-practices": "8d4df4c80dab8342d2956379461994c8ffbece138cc1a58004206ba2fb1c84c1",
+    "prompt:emails": "3d3d069d57008478b08092bc09afe87a8c802de04cc712310659e6e0c00ac98a",
+    "prompt:getting-started": "ba9aa66598b9a8aa17ff52c2ab824056819254978639f73222162ad40daee48a",
+    "prompt:react-email": "3e7e662d763a3fb2b458731ebdaa5a32a1c2276b506f093cdb0ae7824c2a3a5d",
+    "prompt:resend": "ced1b3f1bed1fd32a21475dc59b3e8e086192d288ee064a769aa7f2c688e4160",
+    "prompt:seo-audit": "9e316203cc598f32bbeaebbe2663e926fe5e519dfc39873b33c0f40aea10c073",
+    "prompt:weekly-site-report": "7a893e35f993a1bdf534ec9e4d955681e2c7afc0257732bf6d6839050f0bd6af",
+    "tool:gauge_modules": "40427425d300357566a93763272f6b3ddd8ada8305ec9fc743e758ce1dffd0eb",
+    "tool:resend_domains": "6798a772bbfe63e2c13247ae8a6ec57524fe220d8b6e45608a34d45c45955a25",
+    "tool:resend_emails": "c7649c44adaea9f649e699fc030db3ad457b23f73cb786d073a85f401fcf0661",
+    "tool:resend_send": "5edd3b879a34feaf72288595552c455992a7a2feca0af0462159e14902e7d8e3",
+    "tool:umami_metrics": "741ce4efe3ad005d6f5f691dd15ecaf7d51ea391cc7c06b24ff85cc365654bef",
+    "tool:umami_pageviews": "3a83daadc80ccdf8c894d105ec4281108139f101a2c91c99f32a760a143074fa",
+    "tool:umami_stats": "0a730a1d73541eac0e6ebf992f3e174cd4a811856cd4b6e5a78f7deca6bc2399",
+    "tool:umami_websites": "51eba930a08d5bf857db1027ab3cd7bd975343fb2b2f90eb5f829bf017ff01fe"
+  }
+}

@@ -328,3 +328,92 @@ def test_stdio_process_starts_with_empty_env(tmp_path):
     from gauge_mcp import __version__
     assert replies[1]["result"]["serverInfo"] == {"name": "gauge", "version": __version__}
     assert {t["name"] for t in replies[2]["result"]["tools"]} == ALL
+
+
+# --- skills: one source, served as MCP prompts and resources ---------------
+
+from pathlib import Path
+
+SKILLS = sorted(p.name for p in (Path(__file__).resolve().parent.parent / "skills").iterdir() if (p / "SKILL.md").exists())
+
+
+def test_every_skill_is_an_mcp_prompt():
+    prompts = {p.name for p in asyncio.run(server({}).list_prompts())}
+    assert prompts == set(SKILLS) and "getting-started" in prompts
+
+
+def test_skill_prompt_returns_the_skill_text():
+    msgs = asyncio.run(server({}).get_prompt("weekly-site-report")).messages
+    assert "umami_metrics" in msgs[0].content.text
+
+
+def test_skill_files_are_resources():
+    uris = {str(r.uri) for r in asyncio.run(server({}).list_resources())}
+    assert "skill://gauge/getting-started/SKILL.md" in uris
+    assert any(u.startswith("skill://gauge/copywriting/references/") for u in uris)
+
+
+def test_discovery_lists_skills_and_credits_the_publisher():
+    out = call(server({}), "gauge_modules")
+    assert {s["name"] for s in out["skills"]} == set(SKILLS)
+    assert out["publisher"] == "Seaynic Labs" and out["homepage"] == "https://github.com/seayniclabs/gauge"
+
+
+def test_no_promotion_reaches_the_model():
+    # Credit lives in the README, CREDITS and metadata. Text the model reads (instructions, prompts,
+    # tool descriptions) carries no links to our services: that looks like prompt injection and costs tokens.
+    srv = server({})
+    texts = [srv.instructions or ""] + [t.description or "" for t in asyncio.run(srv.list_tools())]
+    texts += [asyncio.run(srv.get_prompt(p.name)).messages[0].content.text for p in asyncio.run(srv.list_prompts())]
+    assert not any("seayniclabs.com" in x or "Need tools like this" in x for x in texts)
+
+
+def test_skill_checker_passes_and_catches_a_missing_license(tmp_path):
+    root = Path(__file__).resolve().parent.parent
+    ok = subprocess.run([sys.executable, str(root / "scripts" / "check_skills.py")], capture_output=True, text=True)
+    assert ok.returncode == 0, ok.stdout
+    # a copy of the repo layout with one third-party skill missing its LICENSE must fail
+    import shutil
+    shutil.copytree(root / "skills", tmp_path / "skills")
+    shutil.copy(root / "pyproject.toml", tmp_path / "pyproject.toml")
+    shutil.copy(root / "CREDITS.md", tmp_path / "CREDITS.md")
+    (tmp_path / "scripts").mkdir()
+    shutil.copy(root / "scripts" / "check_skills.py", tmp_path / "scripts" / "check_skills.py")
+    (tmp_path / "skills" / "copywriting" / "LICENSE").unlink()
+    bad = subprocess.run([sys.executable, str(tmp_path / "scripts" / "check_skills.py")], capture_output=True, text=True)
+    assert bad.returncode == 1 and "copywriting" in bad.stdout
+
+
+# --- approval log and doctor -----------------------------------------------
+
+def read_log(path):
+    return [json.loads(l) for l in path.read_text().splitlines()] if path.exists() else []
+
+
+def test_approval_log_records_grant_without_the_body(tmp_path):
+    log = tmp_path / "approvals.jsonl"
+    env = {**RESEND, "GAUGE_RESEND_ALLOWED_RECIPIENTS": "@example.com", "GAUGE_APPROVAL_LOG": str(log)}
+    call(server(env, send_handler([])), "resend_send", to=["a@example.com"], subject="Hi", text="secret body", confirm=True)
+    rows = read_log(log)
+    assert [r["decision"] for r in rows] == ["approved"] and rows[0]["approved_by"] == "allowlist"
+    assert "secret body" not in log.read_text() and rows[0]["body_chars"] == len("secret body")
+
+
+def test_approval_log_records_refusal(tmp_path):
+    log = tmp_path / "approvals.jsonl"
+    with pytest.raises(Exception):
+        call(server({**RESEND, "GAUGE_APPROVAL_LOG": str(log)}, send_handler([])), "resend_send",
+             to=["a@example.com"], subject="Hi", text="x", confirm=True)
+    assert [r["decision"] for r in read_log(log)] == ["refused"]
+
+
+def test_doctor_names_missing_settings_and_exits_1(tmp_path):
+    env = {"PATH": os.environ.get("PATH", ""), "HOME": str(tmp_path)}
+    r = subprocess.run([sys.executable, "-m", "gauge_mcp.server", "--doctor"], env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 1 and "GAUGE_RESEND_API_KEY" in r.stdout and "FIX" in r.stdout
+
+
+def test_tool_lock_is_current():
+    root = Path(__file__).resolve().parent.parent
+    r = subprocess.run([sys.executable, str(root / "scripts" / "tool_lock.py"), "--check"], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout

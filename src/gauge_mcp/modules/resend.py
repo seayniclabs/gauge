@@ -11,6 +11,7 @@ from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from ..config import Config
+from .. import approvals
 from ..errors import GaugeError
 from . import ClientFactory, Module, Setting
 
@@ -175,6 +176,7 @@ class ResendModule(Module):
 
             # The approval must come from the person or their settings, never from the model's own arguments.
             approved_by = None
+            logged = {"to": to, "subject": subject, "body_chars": len(text or "") + len(html or "")}
             if not config.flag("resend", "require_confirm", True):
                 approved_by = "settings"
             elif allowlist and not outside:
@@ -189,11 +191,14 @@ class ResendModule(Module):
                     f"Text: {_excerpt(text)}",
                     f"HTML: {_excerpt(html)}",
                 ])
+                approvals.record(config.env, "resend_send", "requested", None, logged)
                 answer = await ctx.elicit(summary, SendApproval)
                 if answer.action != "accept" or not answer.data.send:
+                    approvals.record(config.env, "resend_send", "declined", "person", logged)
                     return SendResult(sent=False, draft=draft, note="The person declined. Nothing was sent.")
                 approved_by = "person"
             else:
+                approvals.record(config.env, "resend_send", "refused", None, logged)
                 raise GaugeError(
                     "resend", "approval_unavailable",
                     "this MCP client cannot ask you to approve a send, and the recipients are not pre-approved.",
@@ -205,6 +210,7 @@ class ResendModule(Module):
             for k in ("text", "html", "reply_to"):
                 if getattr(draft, k):
                     body[k] = getattr(draft, k)
+            approvals.record(config.env, "resend_send", "approved", approved_by, logged)
             data = await call("POST", "/emails", json=body)
             return SendResult(sent=True, id=data.get("id"), draft=draft, approved_by=approved_by)
 

@@ -1,0 +1,10 @@
+{
+  "name": "gauge",
+  "version": "0.2.0",
+  "description": "Your website's Umami analytics and Resend email in your AI assistant, plus skills for weekly reports, copy, SEO and email. By Seaynic Labs.",
+  "author": { "name": "Seaynic Labs", "url": "https://seayniclabs.com" },
+  "homepage": "https://github.com/seayniclabs/gauge",
+  "repository": "https://github.com/seayniclabs/gauge",
+  "license": "MIT",
+  "keywords": ["mcp", "umami", "analytics", "resend", "email", "skills"]
+}

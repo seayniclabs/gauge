@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "gauge": {
+      "command": "uvx",
+      "args": [
+        "gauge-mcp==0.2.0"
+      ]
+    }
+  }
+}
