@@ -9,5 +9,5 @@ Gauge follows [semantic versioning](https://semver.org). Modules added after 0.1
 - Every tool returns structured data with a published output schema.
 - `umami_metrics` gives real ranked breakdowns (top pages, referrers, countries, browsers and more), with `limit`, `offset` and `search`.
 - Umami Cloud supported through an API key, as well as a self-hosted login.
-- `resend_send` previews by default and sends only with `confirm=true`. The sender comes from settings, never from code.
+- `resend_send` previews by default. Sending needs the person's approval: asked through MCP elicitation, or given ahead of time with `GAUGE_RESEND_ALLOWED_RECIPIENTS` or `GAUGE_RESEND_REQUIRE_CONFIRM=false`. The assistant's own `confirm=true` is never enough. The sender comes from settings, never from code.
 - Runs over stdio or streamable HTTP. Starts with no settings and reports what is missing when a tool is called.
