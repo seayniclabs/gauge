@@ -1,5 +1,7 @@
 # Gauge
 
+<!-- mcp-name: io.github.seayniclabs/gauge -->
+
 Gauge is an MCP server for people running a small website. It lets an AI assistant read your site's analytics and send email, from one install.
 
 It is a **bundle**: one server made of modules. You switch on the modules you use. New modules arrive switched off, so an update never changes what your assistant can do until you choose to.
