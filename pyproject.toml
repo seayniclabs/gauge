@@ -1,6 +1,6 @@
 [project]
 name = "gauge-mcp"
-version = "0.2.0"
+version = "0.2.1"
 description = "MCP bundle for people running a small website: web analytics (Umami) and email (Resend) in one server."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -1,6 +1,6 @@
 {
   "bundle": "gauge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "entries": {
     "instructions": "badd8ffb6c32c13b2a76d253266408fe82f4faead00ab2885c2001c2cad6a290",
     "prompt:analytics": "6f5888f0265843b75d4f3b8558b9ce2c687fd0b72fa3b5e78c7006b26c975ce7",

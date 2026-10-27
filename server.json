@@ -6,12 +6,12 @@
     "url": "https://github.com/seayniclabs/gauge",
     "source": "github"
   },
-  "version": "0.2.0",
+  "version": "0.2.1",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "gauge-mcp",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         { "name": "GAUGE_UMAMI_URL", "description": "Your Umami address", "isRequired": false },

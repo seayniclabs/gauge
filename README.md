@@ -50,7 +50,7 @@ uvx gauge-mcp --version
 uvx gauge-mcp --doctor          # checks your settings and connections, prints fixes
 ```
 
-Pin the exact version if you want updates only when you choose them: `uvx gauge-mcp==0.2.0`.
+Pin the exact version if you want updates only when you choose them: `uvx gauge-mcp==0.2.1`.
 
 Or with pip:
 

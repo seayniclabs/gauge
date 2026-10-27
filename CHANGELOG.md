@@ -2,6 +2,14 @@
 
 Gauge follows [semantic versioning](https://semver.org). Modules added after 0.1 ship switched off.
 
+## 0.2.1 — 2026-10-27
+
+**No code changes.** Change the pin to `gauge-mcp==0.2.1`.
+
+### Release process
+
+- Built and published by GitHub Actions (`release.yml`) with PyPI trusted publishing. The wheel and sdist carry PyPI provenance and a GitHub build attestation; check a download with `gh attestation verify <file> --owner seayniclabs`.
+
 ## 0.2.0 — 2026-10-27
 
 - Skills: 9 skills ship with Gauge. `getting-started` and `weekly-site-report` are new; `analytics`, `seo-audit`, `copywriting` and `emails` (Corey Haines) and `resend`, `email-best-practices` and `react-email` (Resend) are included under MIT with credit.
