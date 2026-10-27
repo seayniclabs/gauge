@@ -323,8 +323,7 @@ def test_stdio_process_starts_with_empty_env(tmp_path):
         {"jsonrpc": "2.0", "method": "notifications/initialized"},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
     ]
-    out, _ = proc.communicate("".join(json.dumps(m) + "\n" for m in msgs), timeout=60)
-    replies = {r.get("id"): r for r in map(json.loads, out.splitlines()) if r.get("id")}
+    replies = _exchange(proc, msgs)
     from gauge_mcp import __version__
     assert replies[1]["result"]["serverInfo"] == {"name": "gauge", "version": __version__}
     assert {t["name"] for t in replies[2]["result"]["tools"]} == ALL
@@ -417,3 +416,28 @@ def test_tool_lock_is_current():
     root = Path(__file__).resolve().parent.parent
     r = subprocess.run([sys.executable, str(root / "scripts" / "tool_lock.py"), "--check"], capture_output=True, text=True)
     assert r.returncode == 0, r.stdout
+
+
+def _exchange(proc, msgs, timeout=60):
+    """Send messages, then read replies until every request id has answered. Closing stdin first
+    races the server's shutdown against its last reply on fast machines."""
+    import time
+    for m in msgs:
+        proc.stdin.write(json.dumps(m) + "\n")
+        proc.stdin.flush()
+    want = {m["id"] for m in msgs if "id" in m}
+    replies, end = {}, time.time() + timeout
+    while want - set(replies) and time.time() < end:
+        line = proc.stdout.readline()
+        if not line:
+            break
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("id") is not None:
+            replies[r["id"]] = r
+    proc.stdin.close()
+    proc.kill()
+    proc.wait()
+    return replies
