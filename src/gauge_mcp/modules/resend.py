@@ -191,14 +191,14 @@ class ResendModule(Module):
                     f"Text: {_excerpt(text)}",
                     f"HTML: {_excerpt(html)}",
                 ])
-                approvals.record(config.env, "resend_send", "requested", None, logged)
+                approvals.record(config.env, "resend_send", "requested", None, logged, ctx)
                 answer = await ctx.elicit(summary, SendApproval)
                 if answer.action != "accept" or not answer.data.send:
-                    approvals.record(config.env, "resend_send", "declined", "person", logged)
+                    approvals.record(config.env, "resend_send", "declined", "person", logged, ctx)
                     return SendResult(sent=False, draft=draft, note="The person declined. Nothing was sent.")
                 approved_by = "person"
             else:
-                approvals.record(config.env, "resend_send", "refused", None, logged)
+                approvals.record(config.env, "resend_send", "refused", None, logged, ctx)
                 raise GaugeError(
                     "resend", "approval_unavailable",
                     "this MCP client cannot ask you to approve a send, and the recipients are not pre-approved.",
@@ -210,7 +210,7 @@ class ResendModule(Module):
             for k in ("text", "html", "reply_to"):
                 if getattr(draft, k):
                     body[k] = getattr(draft, k)
-            approvals.record(config.env, "resend_send", "approved", approved_by, logged)
+            approvals.record(config.env, "resend_send", "approved", approved_by, logged, ctx)
             data = await call("POST", "/emails", json=body)
             return SendResult(sent=True, id=data.get("id"), draft=draft, approved_by=approved_by)
 

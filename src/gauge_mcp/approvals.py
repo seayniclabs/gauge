@@ -22,13 +22,42 @@ def log_path(env: Mapping[str, str]) -> Path:
     return Path(base) / "gauge" / "approvals.jsonl"
 
 
-def record(env: Mapping[str, str], tool: str, decision: str, by: str | None, details: dict) -> None:
+def _client_info(ctx: object | None) -> dict | None:
+    """Extract client name and version from an MCP Context, if available."""
+    if ctx is None:
+        return None
+    try:
+        client_params = ctx.session.client_params  # type: ignore[union-attr]
+    except (ValueError, AttributeError):
+        return None
+    if not client_params or not client_params.clientInfo:
+        return None
+    info = client_params.clientInfo
+    return {"name": info.name, "version": info.version}
+
+
+def record(
+    env: Mapping[str, str],
+    tool: str,
+    decision: str,
+    by: str | None,
+    details: dict,
+    ctx: object | None = None,
+) -> None:
     """decision: requested | approved | declined | refused. Never raises: logging must not break a send."""
     try:
         path = log_path(env)
         path.parent.mkdir(parents=True, exist_ok=True)
-        line = {"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tool": tool,
-                "decision": decision, "approved_by": by, **details}
+        client = _client_info(ctx)
+        line = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "tool": tool,
+            "decision": decision,
+            "approved_by": by,
+            **details,
+        }
+        if client:
+            line["client"] = client
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(line, ensure_ascii=False) + "\n")
         os.chmod(path, 0o600)

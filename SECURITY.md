@@ -12,6 +12,7 @@ We acknowledge reports within 2 business days and aim to ship a fix for confirme
 - Credentials come from environment variables or `~/.config/gauge/config.toml`. They are never tool arguments and never returned to the model.
 - Sending email needs a person's approval, given in the app or ahead of time in settings. The model's own `confirm=true` is never enough.
 - Every approval decision is logged locally in `~/.local/state/gauge/approvals.jsonl`.
+- The approval log records the MCP client name and version (from the `initialize` request's `clientInfo`) in a `client` field. This shows **which app answered** the approval prompt, not **who** (a person vs. a script). A scripted "Accept" from a test harness and a human click in Claude Desktop both log as `approved_by: "person"`, but their `client` fields differ.
 - `tool-manifest.lock.json` records a hash of every tool description, prompt and the server instructions. CI fails if they change without the lock changing too.
 
 ## Supported versions

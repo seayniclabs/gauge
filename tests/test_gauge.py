@@ -255,7 +255,7 @@ def test_resend_require_confirm_false_lets_assistant_send():
     assert out["approved_by"] == "settings" and len(seen) == 1
 
 
-def send_via_client(answer):
+def send_via_client(answer, env=None, client_info=None):
     """Call resend_send through a real MCP client session that answers the approval prompt."""
     from mcp.shared.memory import create_connected_server_and_client_session
     from mcp.types import ElicitResult
@@ -268,7 +268,8 @@ def send_via_client(answer):
 
     async def run():
         async with create_connected_server_and_client_session(
-                server(RESEND, send_handler(seen)), elicitation_callback=on_elicit) as client:
+                server(env or RESEND, send_handler(seen)), client_info=client_info,
+                elicitation_callback=on_elicit) as client:
             r = await client.call_tool("resend_send", {"to": ["a@example.com"], "subject": "Hi", "text": "Hello", "confirm": True})
             return r.structuredContent
     return asyncio.run(run()), seen, asked
@@ -441,3 +442,21 @@ def _exchange(proc, msgs, timeout=60):
     proc.kill()
     proc.wait()
     return replies
+
+
+# --- approval log client field ---------------------------------------------
+
+def test_approval_log_records_client_field(tmp_path):
+    """Every row names the app that answered, so a scripted accept is not a human click."""
+    from mcp.types import Implementation
+
+    log = tmp_path / "approvals.jsonl"
+    env = {**RESEND, "GAUGE_APPROVAL_LOG": str(log)}
+    out, _, _ = send_via_client(True, env=env, client_info=Implementation(name="demo-harness", version="1.2.3"))
+    assert out["sent"] is True
+    rows = read_log(log)
+    assert [r["decision"] for r in rows] == ["requested", "approved"]
+    for row in rows:
+        assert row["client"] == {"name": "demo-harness", "version": "1.2.3"}
+    # approved_by is unchanged: it says a person answered, the client says which app asked them.
+    assert rows[-1]["approved_by"] == "person"
