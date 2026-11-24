@@ -142,7 +142,7 @@ def test_dns_resolver_error_is_unknown():
     assert r.overall == "UNKNOWN"
 
 
-@pytest.mark.parametrize("ip", ["127.0.0.1", "10.1.2.3", "192.168.68.1", "169.254.169.254", "100.64.0.1", "::1", "fd00::1", "0.0.0.0"])
+@pytest.mark.parametrize("ip", ["127.0.0.1", "10.1.2.3", "192.168.1.1", "169.254.169.254", "100.64.0.1", "::1", "fd00::1", "0.0.0.0"])
 def test_private_address_is_blocked(ip):
     r = run(d=deps(HOME_OK, table={"example.com": [ip]}))
     assert by(r)["dns"] == "FAILING"
@@ -464,3 +464,36 @@ def test_sweep_caps_the_number_of_targets():
 def test_config_raw_returns_tables_unchanged():
     cfg = Config(env={}, file_data={"health": {"targets": [{"url": "https://a.example/"}]}})
     assert cfg.raw("health", "targets") == [{"url": "https://a.example/"}]
+
+
+def test_bad_numeric_setting_does_not_crash_startup():
+    mcp = health_server({"GAUGE_HEALTH_ENABLED": "true", "GAUGE_HEALTH_MAX_MS": "abc", "GAUGE_HEALTH_TLS_MIN_DAYS": "-"})
+    assert "health_check" in tool_names(mcp)
+
+
+def test_config_raw_treats_an_empty_env_value_as_unset():
+    cfg = Config(env={"GAUGE_HEALTH_TARGETS": ""}, file_data={"health": {"targets": [{"url": "https://a.example/"}]}})
+    assert cfg.raw("health", "targets") == [{"url": "https://a.example/"}]
+
+
+def test_domain_walk_continues_past_a_registry_400():
+    """Live finding 2026-11-23: the .org registry answers 400 (not 404) for www.<name>.org."""
+    def handler(request):
+        if request.url.host == "rdap.org":
+            d = str(request.url).rsplit("/", 1)[-1]
+            return httpx.Response(200, json=rdap(200)) if d == "example.org" else httpx.Response(400)
+        return httpx.Response(200, headers=GOOD_HEADERS, content=b"")
+    d = H.Deps(resolve=resolver({"www.example.org": ["93.184.215.14"]}), tls=tls(),
+               client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+               now=lambda: NOW, clock=itertools.count(0, 0.01).__next__)
+    c = {x.check: x for x in run("https://www.example.org/", d=d).checks}["domain"]
+    assert c.status == "OK" and c.data["domain"] == "example.org"
+
+
+def test_domain_registry_rate_limit_is_unknown():
+    assert by(run(d=deps(HOME_OK, rdap_by_domain={"example.com": rdap()}, rdap_error=None)))["domain"] == "OK"
+    def handler(request):
+        return httpx.Response(429) if request.url.host == "rdap.org" else httpx.Response(200, headers=GOOD_HEADERS)
+    d = H.Deps(resolve=resolver(), tls=tls(), client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+               now=lambda: NOW, clock=itertools.count(0, 0.01).__next__)
+    assert by(run(d=d))["domain"] == "UNKNOWN"

@@ -397,7 +397,9 @@ async def _check_domain(host: str, domain: str | None, deps: Deps, settings: Set
                         f"https://rdap.org/domain/{candidate}", headers={"Accept": "application/rdap+json"},
                         follow_redirects=True, timeout=settings.timeout_s,
                     )
-                    if response.status_code == 404:
+                    # Not this name: registries answer 404, and some (.org) 400, for a name below the
+                    # registered domain. Rate limits and server errors mean the lookup itself failed.
+                    if 400 <= response.status_code < 500 and response.status_code != 429:
                         continue
                     if response.status_code == 200:
                         return _domain_result(response.json(), candidate, deps, settings)
@@ -521,10 +523,18 @@ class HealthModule(Module):
     ) -> None:
         dependencies = deps if deps is not None else Deps.real()
         defaults = Settings()
+        def number(key: str, default: int) -> int:
+            # A bad value falls back to the default: settings must never stop the server starting.
+            try:
+                value = int(config.get(self.name, key) or default)
+            except ValueError:
+                return default
+            return value if value >= 0 else default
+
         settings = Settings(
-            tls_min_days=int(config.get(self.name, "tls_min_days") or defaults.tls_min_days),
-            domain_min_days=int(config.get(self.name, "domain_min_days") or defaults.domain_min_days),
-            max_ms=int(config.get(self.name, "max_ms") or defaults.max_ms),
+            tls_min_days=number("tls_min_days", defaults.tls_min_days),
+            domain_min_days=number("domain_min_days", defaults.domain_min_days),
+            max_ms=number("max_ms", defaults.max_ms),
             allow_private=config.flag(self.name, "allow_private", defaults.allow_private),
         )
 

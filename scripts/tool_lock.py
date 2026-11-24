@@ -26,6 +26,9 @@ from gauge_mcp import __version__  # noqa: E402
 from gauge_mcp.config import Config  # noqa: E402
 from gauge_mcp.server import build_server  # noqa: E402
 
+# Snapshot every module, including those that ship switched off, so none escapes the lock or the card.
+ALL_ON = {"GAUGE_HEALTH_ENABLED": "true"}
+
 
 
 def _clean(d: dict) -> dict:
@@ -39,7 +42,7 @@ def digest(obj) -> str:
 
 
 def snapshot() -> dict:
-    srv = build_server(Config(env={}, file_data={}))
+    srv = build_server(Config(env=ALL_ON, file_data={}))
     tools = asyncio.run(srv.list_tools())
     prompts = asyncio.run(srv.list_prompts())
     entries = {f"tool:{t.name}": digest(_clean(t.model_dump(exclude_none=True, mode="json"))) for t in tools}

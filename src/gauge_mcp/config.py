@@ -34,10 +34,11 @@ class Config:
 
     def raw(self, module: str, key: str, default: Any = None) -> Any:
         """Read a setting without converting TOML values to strings."""
-        env_key = f"GAUGE_{module.upper()}_{key.upper()}"
-        if env_key in self.env:
-            return self.env[env_key]
-        return self.file.get(module, {}).get(key, default)
+        value = self.env.get(f"GAUGE_{module.upper()}_{key.upper()}")
+        if value not in (None, ""):
+            return value
+        value = self.file.get(module, {}).get(key)
+        return default if value in (None, "") else value
 
     def get(self, module: str, key: str, default: str | None = None) -> str | None:
         value = self.env.get(f"GAUGE_{module.upper()}_{key.upper()}")
