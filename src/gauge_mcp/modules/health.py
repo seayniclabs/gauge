@@ -12,9 +12,10 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Awaitable, Callable, Literal
 from html.parser import HTMLParser
+from typing import Awaitable, Callable, Literal
 from urllib.parse import urlsplit
+from xml.etree import ElementTree
 
 import httpx
 import idna
@@ -29,6 +30,7 @@ from . import ClientFactory, Module, Setting
 DAY = 86_400
 CHECKS = ("dns", "http", "tls", "domain", "content", "headers")
 AI_CHECKS = ("robots_ai", "structured_data", "server_text", "llms_txt")
+SEO_CHECKS = ("seo_title", "seo_description", "seo_indexable", "seo_canonical", "seo_sitemap", "seo_basics", "seo_social")
 SEARCH_BOTS = ["OAI-SearchBot", "PerplexityBot", "Claude-SearchBot"]
 TRAINING_BOTS = ["GPTBot", "ClaudeBot", "Google-Extended"]
 STATUSES = ("OK", "FAILING", "UNKNOWN")
@@ -126,6 +128,7 @@ class Report(BaseModel):
     checks: list[CheckResult]
     # Combined verdict of the scored AI-readiness checks (robots_ai, structured_data, server_text); null if none ran.
     ai_readiness: Status | None = None
+    seo: Status | None = None
 
 
 class Sweep(BaseModel):
@@ -258,6 +261,17 @@ class _PageHTML(HTMLParser):
         self.text: list[str] = []
         self.hidden: list[str] = []
         self.in_json_ld = False
+        self._title_parts: list[list[str]] = []
+        self._in_title = False
+        self.meta: list[tuple[str, str, str]] = []
+        self.canonicals: list[str] = []
+        self.lang = ""
+        self.h1 = 0
+        self.images_without_alt = 0
+
+    @property
+    def titles(self) -> list[str]:
+        return [" ".join("".join(parts).split()) for parts in self._title_parts]
 
     def handle_starttag(self, tag, attrs):
         if tag in self.hidden_tags:
@@ -267,18 +281,114 @@ class _PageHTML(HTMLParser):
             self.in_json_ld = mime.strip().lower() == "application/ld+json"
             if self.in_json_ld:
                 self.blocks.append("")
+        elif tag == "title" and "svg" not in self.hidden:  # an inline SVG's <title> labels the icon, not the page
+            self._title_parts.append([])
+            self._in_title = True
+        elif tag == "meta":
+            attributes = dict(attrs)
+            self.meta.append(((attributes.get("name") or "").strip().lower(),
+                              (attributes.get("property") or "").strip().lower(),
+                              attributes.get("content") or ""))
+        elif tag == "link":
+            attributes = dict(attrs)
+            if "canonical" in (attributes.get("rel") or "").lower().split():
+                self.canonicals.append((attributes.get("href") or "").strip())
+        elif tag == "html" and not self.lang:
+            self.lang = (dict(attrs).get("lang") or "").strip()
+        elif tag == "h1":
+            self.h1 += 1
+        elif tag == "img" and "alt" not in dict(attrs):
+            self.images_without_alt += 1
 
     def handle_endtag(self, tag):
         if tag == "script":
             self.in_json_ld = False
+        elif tag == "title":
+            self._in_title = False
         if self.hidden and self.hidden[-1] == tag:
             self.hidden.pop()
 
     def handle_data(self, data):
+        if self._in_title:
+            self._title_parts[-1].append(data)
         if self.in_json_ld:
             self.blocks[-1] += data
         elif not self.hidden:
             self.text.append(data)
+
+
+def _seo_title(page: _PageHTML) -> CheckResult:
+    titles = page.titles
+    count = len(titles)
+    length = len(titles[0]) if titles else 0
+    if not count:
+        failure = "no <title>"
+    elif count > 1:
+        failure = f"{count} <title> tags"
+    elif not 10 <= length <= 65:
+        failure = f"title is {length} characters (aim for 10–65)"
+    else:
+        failure = None
+    return CheckResult(check="seo_title", status="FAILING" if failure else "OK",
+                       detail=failure or "title present", data={"count": count, "length": length})
+
+
+def _seo_description(page: _PageHTML) -> CheckResult:
+    description = next((content for name, _, content in page.meta if name == "description"), "")
+    length = len(description) if description.strip() else 0
+    if not length:
+        failure = "no meta description"
+    elif not 50 <= length <= 160:
+        failure = f"description is {length} characters (aim for 50–160)"
+    else:
+        failure = None
+    return CheckResult(check="seo_description", status="FAILING" if failure else "OK",
+                       detail=failure or "meta description present", data={"length": length})
+
+
+def _seo_canonical(page: _PageHTML, url: httpx.URL) -> CheckResult:
+    data = {"same_host": False, "self": False}
+    check = "seo_canonical"
+    if not page.canonicals or not page.canonicals[0]:
+        return CheckResult(check=check, status="FAILING", detail="no canonical link", data=data)
+    try:
+        canonical = url.join(page.canonicals[0])
+    except (ValueError, httpx.InvalidURL):
+        return CheckResult(check=check, status="FAILING", detail="canonical is not an HTTP(S) URL", data=data)
+    if canonical.scheme not in {"http", "https"} or not canonical.host:
+        return CheckResult(check=check, status="FAILING", detail="canonical is not an HTTP(S) URL", data=data)
+    if canonical.raw_host.lower() != url.raw_host.lower():
+        return CheckResult(check=check, status="FAILING", detail="canonical points to another host", data=data)
+
+    target, final = urlsplit(str(canonical)), urlsplit(str(url))
+    data["same_host"] = True
+    data["self"] = target._replace(path=target.path.removesuffix("/"), fragment="") == final._replace(
+        path=final.path.removesuffix("/"), fragment="",
+    )
+    return CheckResult(check=check, status="OK", detail="canonical link present", data=data)
+
+
+def _seo_basics(page: _PageHTML) -> CheckResult:
+    missing = []
+    if not page.lang:
+        missing.append("lang")
+    if not any(name == "viewport" and content.strip() for name, _, content in page.meta):
+        missing.append("viewport")
+    if page.h1 != 1:
+        missing.append("one-h1")
+    if page.images_without_alt:
+        missing.append("img-alt")
+    detail = f"missing: {', '.join(missing)}" if missing else "page basics present"
+    return CheckResult(check="seo_basics", status="FAILING" if missing else "OK", detail=detail,
+                       data={"missing": missing, "h1": page.h1, "images_without_alt": page.images_without_alt})
+
+
+def _seo_social(page: _PageHTML) -> CheckResult:
+    present = {key for name, prop, content in page.meta if content.strip() for key in (name, prop)}
+    missing = [key for key in ("og:title", "og:description", "og:image") if key not in present]
+    detail = f"missing: {', '.join(missing)}" if missing else "Open Graph tags present"
+    return CheckResult(check="seo_social", status="FAILING" if missing else "OK", detail=detail,
+                       data={"missing": missing})
 
 
 def _collect_types(node: object, types: list[str]) -> None:
@@ -350,11 +460,12 @@ async def _guarded_get(url: httpx.URL, deps: Deps, settings: Settings, check: st
                     _validate_web_url(target)
                     if urlsplit(location).username is not None:
                         raise ValueError("redirect contains userinfo")
+                    target_host = ascii_host(target.host)
                 except (ValueError, httpx.InvalidURL):
                     yield CheckResult(check=check, status="FAILING", detail="redirect to a non-web address")
                     return
                 if target.raw_host != current.raw_host:
-                    dns = await _resolve(ascii_host(target.host), deps, settings)
+                    dns = await _resolve(target_host, deps, settings)
                     if dns.status != "OK":
                         yield CheckResult(check=check, status=dns.status, detail=dns.detail)
                         return
@@ -363,36 +474,56 @@ async def _guarded_get(url: httpx.URL, deps: Deps, settings: Settings, check: st
 
 async def _check_http(
     url: httpx.URL, deps: Deps, settings: Settings, results: dict[str, CheckResult],
-    expect_text: str | None, check_headers: bool, page_checks: set[str],
-) -> None:
+    expect_text: str | None, check_headers: bool, page_checks: set[str], check_indexable: bool,
+) -> tuple[bool, str | None]:
+    noindex = False
     try:
         async with _guarded_get(url, deps, settings, "http") as fetched:
             if isinstance(fetched, CheckResult):
                 results["http"] = fetched
-                return
+                return noindex, "page not fetched"
             response, elapsed, chain = fetched
             results["http"] = _http_result(url, response.url, response.status_code, elapsed, chain, settings)
-            if check_headers:
+            if check_headers or check_indexable:
                 headers = {name.lower(): value for name, value in response.headers.items()}
-                results["headers"] = _check_headers(response.url, headers)
+                if check_headers:
+                    results["headers"] = _check_headers(response.url, headers)
+                if check_indexable:
+                    noindex = bool(re.search(r"\bnoindex\b", headers.get("x-robots-tag", ""), re.IGNORECASE))
             body, truncated = await _read_body(response, settings.max_body)
             if expect_text is not None:
                 results["content"] = _check_content(body, truncated, expect_text)
-            if page_checks and not 200 <= response.status_code < 300:
-                # An error or bot-block page is not the page people see: don't score it.
-                for name in page_checks:
-                    results[name] = CheckResult(check=name, status="UNKNOWN",
-                                                detail=f"page answered {response.status_code}; not checked")
-            elif page_checks:
+            page_error = None
+            if not 200 <= response.status_code < 300:
+                page_error = f"page answered {response.status_code}; not checked"
+            if check_indexable or (page_checks and page_error is None):
                 page = _PageHTML()
                 page.feed(body.decode("utf-8", errors="replace"))
                 page.close()
+                if check_indexable:
+                    noindex = noindex or any(
+                        re.search(r"\bnoindex\b", content, re.IGNORECASE)
+                        for name, _, content in page.meta if name in {"robots", "googlebot"}
+                    )
+            if page_error is not None:
+                # An error or bot-block page is not the page people see: don't score it.
+                for name in page_checks:
+                    results[name] = CheckResult(check=name, status="UNKNOWN", detail=page_error)
+            elif page_checks:
                 if "structured_data" in page_checks:
                     results["structured_data"] = _structured_data(page.blocks)
                 if "server_text" in page_checks:
                     results["server_text"] = _server_text(page.text)
+                if "seo_canonical" in page_checks:
+                    results["seo_canonical"] = _seo_canonical(page, response.url)
+                for name, evaluate in (("seo_title", _seo_title), ("seo_description", _seo_description),
+                                       ("seo_basics", _seo_basics), ("seo_social", _seo_social)):
+                    if name in page_checks:
+                        results[name] = evaluate(page)
+            return noindex, page_error
     except httpx.HTTPError as exc:
         results["http"] = CheckResult(check="http", status="FAILING", detail=type(exc).__name__)
+        return noindex, "page not fetched"
 
 
 async def _read_body(response: httpx.Response, limit: int) -> tuple[bytearray, bool]:
@@ -563,13 +694,7 @@ def _robots_matches(pattern: str, path: str) -> bool:
     return True
 
 
-def _robots_ai(status: int, body: bytearray, path: str) -> CheckResult:
-    if 400 <= status < 500 and status != 429:
-        return CheckResult(check="robots_ai", status="OK", detail="no robots.txt; all crawlers allowed",
-                           data={"robots_txt": False})
-    if status != 200:
-        return CheckResult(check="robots_ai", status="UNKNOWN", detail="could not read robots.txt")
-
+def _robots_allowed(body: bytearray, path: str, bots: list[str]) -> dict[str, bool]:
     path = _robots_path(path)
     best: dict[str, tuple[int, bool]] = {}
     default = (0, True)
@@ -583,7 +708,17 @@ def _robots_ai(status: int, body: bytearray, path: str) -> CheckResult:
             best[agent] = max(best.get(agent, default), winner)
 
     fallback = best.get("*", default)
-    allowed = {bot: best.get(bot.lower(), fallback)[1] for bot in SEARCH_BOTS + TRAINING_BOTS}
+    return {bot: best.get(bot.lower(), fallback)[1] for bot in bots}
+
+
+def _robots_ai(status: int, body: bytearray, path: str) -> CheckResult:
+    if 400 <= status < 500 and status != 429:
+        return CheckResult(check="robots_ai", status="OK", detail="no robots.txt; all crawlers allowed",
+                           data={"robots_txt": False})
+    if status != 200:
+        return CheckResult(check="robots_ai", status="UNKNOWN", detail="could not read robots.txt")
+
+    allowed = _robots_allowed(body, path, SEARCH_BOTS + TRAINING_BOTS)
     blocked = [bot for bot in SEARCH_BOTS if not allowed[bot]]
     detail = f"robots.txt blocks AI search crawlers: {', '.join(blocked)}" if blocked else "AI search crawlers allowed"
     return CheckResult(check="robots_ai", status="FAILING" if blocked else "OK", detail=detail,
@@ -600,10 +735,12 @@ def _llms_txt(status: int, body: bytearray) -> CheckResult:
                        detail=f"{detail} (informational, not scored)", data={"present": present})
 
 
-async def _check_ai_file(check: str, url: httpx.URL, deps: Deps, settings: Settings) -> CheckResult:
-    file_url = url.join("/robots.txt" if check == "robots_ai" else "/llms.txt")
+_FileResponse = tuple[int, bytearray] | CheckResult
+
+
+async def _fetch_site_file(url: httpx.URL, deps: Deps, settings: Settings, check: str) -> _FileResponse:
     try:
-        async with _guarded_get(file_url, deps, settings, check) as fetched:
+        async with _guarded_get(url, deps, settings, check) as fetched:
             if isinstance(fetched, CheckResult):
                 return fetched
             response, _, _ = fetched
@@ -613,9 +750,99 @@ async def _check_ai_file(check: str, url: httpx.URL, deps: Deps, settings: Setti
                 body, _ = await _read_body(response, 500_000)
     except httpx.HTTPError:
         status, body = 0, bytearray()
-    if check == "robots_ai":
-        return _robots_ai(status, body, url.raw_path.decode("ascii"))
-    return _llms_txt(status, body)
+    return status, body
+
+
+def _seo_indexable(url: httpx.URL, page_state: tuple[bool, str | None], robots: _FileResponse) -> CheckResult:
+    noindex, page_error = page_state
+    robots_allows = None
+    if not isinstance(robots, CheckResult):
+        robots_status, body = robots
+        if robots_status == 200:
+            robots_allows = _robots_allowed(body, url.raw_path.decode("ascii"), ["Googlebot"])["Googlebot"]
+        elif 400 <= robots_status < 500 and robots_status != 429:
+            robots_allows = True
+    if noindex:
+        status, detail = "FAILING", "page says noindex"
+    elif robots_allows is False:
+        status, detail = "FAILING", "robots.txt blocks search engines from this page"
+    elif robots_allows is None:
+        status, detail = "UNKNOWN", "could not read robots.txt"
+    elif page_error is not None:
+        status, detail = "UNKNOWN", page_error
+    else:
+        status, detail = "OK", "indexable"
+    return CheckResult(check="seo_indexable", status=status, detail=detail,
+                       data={"noindex": noindex, "robots_allows": robots_allows})
+
+
+def _sitemap_candidates(robots: _FileResponse) -> list[httpx.URL]:
+    candidates = []
+    if isinstance(robots, CheckResult) or robots[0] != 200:
+        return candidates
+    for line in robots[1].decode("utf-8-sig", errors="replace").splitlines():
+        key, _, value = line.partition("#")[0].partition(":")
+        if key.strip().lower() != "sitemap":
+            continue
+        try:
+            candidate = httpx.URL(value.strip())
+            _validate_web_url(candidate)
+            ascii_host(candidate.host)
+        except (ValueError, httpx.InvalidURL):
+            continue
+        candidates.append(candidate)
+        if len(candidates) == 3:
+            break
+    return candidates
+
+
+def _parse_sitemap(body: bytearray, source: str) -> CheckResult:
+    check = "seo_sitemap"
+    data = {"source": source}
+    # Also detect declarations in UTF-16/UTF-32 before passing the original bytes to the XML parser.
+    markup = body.replace(b"\x00", b"").lower().removeprefix(b"\xef\xbb\xbf").lstrip()
+    if markup.startswith((b"<html", b"<!doctype html")):
+        failure = "sitemap is an HTML page"
+    elif b"<!doctype" in markup or b"<!entity" in markup:
+        failure = "sitemap uses a DOCTYPE; not parsed"
+    else:
+        try:
+            root = ElementTree.fromstring(body)
+        except (ElementTree.ParseError, LookupError, ValueError):
+            failure = "sitemap is not valid XML"
+        else:
+            child_name = {"urlset": "url", "sitemapindex": "sitemap"}.get(root.tag.rsplit("}", 1)[-1])
+            if child_name:
+                count = sum(child.tag.rsplit("}", 1)[-1] == child_name for child in root)
+                return CheckResult(check=check, status="OK", detail="sitemap found",
+                                   data={"source": source, "urls": count})
+            failure = "sitemap root is not urlset or sitemapindex"
+    return CheckResult(check=check, status="FAILING", detail=failure, data=data)
+
+
+async def _seo_sitemap(url: httpx.URL, robots: _FileResponse, deps: Deps, settings: Settings) -> CheckResult:
+    check = "seo_sitemap"
+    candidates = _sitemap_candidates(robots)
+    source = "robots.txt" if candidates else "/sitemap.xml"
+    data = {"source": source}
+    for candidate in candidates or [url.join("/sitemap.xml")]:
+        if candidate.raw_host != url.raw_host:
+            dns = await _resolve(ascii_host(candidate.host), deps, settings)
+            if dns.status != "OK":
+                if "private" in dns.detail:
+                    return CheckResult(check=check, status=dns.status, detail=dns.detail, data=data)
+                continue
+        fetched = await _fetch_site_file(candidate, deps, settings, check)
+        if isinstance(fetched, CheckResult):
+            return fetched.model_copy(update={"data": data})
+        status, body = fetched
+        if status == 200:
+            return _parse_sitemap(body, source)
+        if 400 <= status < 500 and status != 429:
+            return CheckResult(check=check, status="FAILING", detail="no sitemap found", data=data)
+        if status:
+            break
+    return CheckResult(check=check, status="UNKNOWN", detail="could not read the sitemap", data=data)
 
 
 async def run_checks(
@@ -628,7 +855,10 @@ async def run_checks(
     if "ai" in selected:
         selected.remove("ai")
         selected.update(AI_CHECKS)
-    unknown = selected.difference(CHECKS, AI_CHECKS)
+    if "seo" in selected:
+        selected.remove("seo")
+        selected.update(SEO_CHECKS)
+    unknown = selected.difference(CHECKS, AI_CHECKS, SEO_CHECKS)
     if unknown:
         raise GaugeError("health", "bad_input", f"unknown checks: {', '.join(sorted(unknown))}")
     if expect_text is None:
@@ -640,9 +870,11 @@ async def run_checks(
             raise GaugeError("health", "bad_input", "expected a valid domain name.") from None
 
     results: dict[str, CheckResult] = {}
-    page_checks = selected & {"structured_data", "server_text"}
+    page_checks = selected & {"structured_data", "server_text", "seo_title", "seo_description",
+                              "seo_canonical", "seo_basics", "seo_social"}
     http_checks = selected.intersection({"http", "content", "headers"}) | page_checks
-    file_checks = selected & {"robots_ai", "llms_txt"}
+    robots_checks = selected & {"robots_ai", "seo_indexable", "seo_sitemap"}
+    check_indexable = "seo_indexable" in selected
 
     async def run_tls(address: str) -> None:
         results["tls"] = await _check_tls(normalized, host, address, deps, settings)
@@ -650,32 +882,53 @@ async def run_checks(
     async def run_domain() -> None:
         results["domain"] = await _check_domain(host, domain, deps, settings)
 
-    async def run_http() -> None:
-        await _check_http(
+    async def run_http() -> tuple[bool, str | None]:
+        page_state = await _check_http(
             normalized, deps, settings, results, expect_text if "content" in selected else None,
-            "headers" in selected, page_checks,
+            "headers" in selected, page_checks, check_indexable,
         )
         for check in http_checks - {"http"}:
             if check not in results:
                 results[check] = CheckResult(check=check, status="UNKNOWN", detail="page not fetched")
+        return page_state
 
-    async def run_ai_file(check: str) -> None:
-        results[check] = await _check_ai_file(check, normalized, deps, settings)
+    async def run_llms_txt() -> None:
+        fetched = await _fetch_site_file(normalized.join("/llms.txt"), deps, settings, "llms_txt")
+        results["llms_txt"] = fetched if isinstance(fetched, CheckResult) else _llms_txt(*fetched)
+
+    async def run_robots() -> _FileResponse:
+        fetched = await _fetch_site_file(normalized.join("/robots.txt"), deps, settings, "robots_ai")
+        if "robots_ai" in selected:
+            results["robots_ai"] = fetched if isinstance(fetched, CheckResult) else _robots_ai(
+                *fetched, normalized.raw_path.decode("ascii"),
+            )
+        return fetched
+
+    async def run_indexable(page: Awaitable[tuple[bool, str | None]], robots: Awaitable[_FileResponse]) -> None:
+        results["seo_indexable"] = _seo_indexable(normalized, await page, await robots)
+
+    async def run_sitemap(robots: Awaitable[_FileResponse]) -> None:
+        results["seo_sitemap"] = await _seo_sitemap(normalized, await robots, deps, settings)
 
     async def run_site() -> None:
         dns = results["dns"] = await _resolve(host, deps, settings)
         if dns.status != "OK":
-            for check in http_checks | file_checks | (selected & {"tls"}):
+            for check in http_checks | robots_checks | (selected & {"tls", "llms_txt"}):
                 results[check] = CheckResult(check=check, status="UNKNOWN", detail="skipped: dns check did not pass")
             return
 
         async with asyncio.TaskGroup() as probes:
             if "tls" in selected:
                 probes.create_task(run_tls(dns.data["addresses"][0]))
-            if http_checks:
-                probes.create_task(run_http())
-            for check in file_checks:
-                probes.create_task(run_ai_file(check))
+            page = probes.create_task(run_http()) if http_checks or check_indexable else None
+            if "llms_txt" in selected:
+                probes.create_task(run_llms_txt())
+            if robots_checks:
+                robots = probes.create_task(run_robots())
+                if check_indexable and page is not None:
+                    probes.create_task(run_indexable(page, robots))
+                if "seo_sitemap" in selected:
+                    probes.create_task(run_sitemap(robots))
 
     async def run() -> None:
         async with asyncio.TaskGroup() as probes:
@@ -689,7 +942,7 @@ async def run_checks(
         for check in selected - results.keys():
             results[check] = CheckResult(check=check, status="UNKNOWN", detail="deadline reached")
 
-    reported = [results[check] for check in (*CHECKS, *AI_CHECKS) if check in selected]
+    reported = [results[check] for check in (*CHECKS, *AI_CHECKS, *SEO_CHECKS) if check in selected]
 
     def verdict(names: set[str]) -> Status:
         statuses = {results[name].status for name in selected & names}
@@ -698,9 +951,10 @@ async def run_checks(
     overall = verdict(set(CHECKS) - {"headers"})
     scored_ai = set(AI_CHECKS) - {"llms_txt"}
     ai_readiness = verdict(scored_ai) if selected & scored_ai else None
+    seo = verdict(set(SEO_CHECKS)) if selected.intersection(SEO_CHECKS) else None
     headers = results.get("headers")
     return Report(url=str(normalized), overall=overall, headers=headers.status if headers else None, checks=reported,
-                  ai_readiness=ai_readiness)
+                  ai_readiness=ai_readiness, seo=seo)
 
 
 def _targets(config: Config) -> list[dict]:
@@ -768,7 +1022,7 @@ class HealthModule(Module):
         async def health_check(
             url: str, expect_text: str | None = None, domain: str | None = None, checks: list[str] | None = None,
         ) -> Report:
-            """Check one site. Each check reports OK, FAILING or UNKNOWN (could not run). checks: any of dns, http, tls, domain, content, headers (default all; content needs expect_text). overall leaves out headers, which has its own verdict. Opt-in AI-readiness checks (AEO/GEO): robots_ai, structured_data, server_text, llms_txt, or "ai" for all four; they roll up into ai_readiness (llms_txt is reported, not scored) and never change overall."""
+            """Check one site. Each check reports OK, FAILING or UNKNOWN (could not run). checks: any of dns, http, tls, domain, content, headers (default all; content needs expect_text). overall leaves out headers, which has its own verdict. Opt-in AI-readiness checks (AEO/GEO): robots_ai, structured_data, server_text, llms_txt, or "ai" for all four; they roll up into ai_readiness (llms_txt is reported, not scored) and never change overall. Opt-in SEO checks: seo_title, seo_description, seo_indexable, seo_canonical, seo_sitemap, seo_basics, seo_social, or "seo" for all seven; they roll up into seo and never change overall."""
             return await run_checks(
                 url, deps=dependencies, settings=settings, expect_text=expect_text, domain=domain, checks=checks,
             )

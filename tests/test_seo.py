@@ -14,8 +14,8 @@ from gauge_mcp.modules import health as H
 from gauge_mcp.server import build_server
 from test_health import GOOD_HEADERS, deps, run
 
-TITLE = "Custom Cakes in Clarksville | The Cakery"                               # 41 chars
-DESCRIPTION = "Wedding, birthday and celebration cakes baked to order in Clarksville, TN. Order online today."  # 95
+TITLE = "Custom Cakes in Springfield | Example Bakery"
+DESCRIPTION = "Wedding, birthday and celebration cakes baked to order in Springfield. Order online today."
 GOOD_HEAD = (
     f"<title>{TITLE}</title>"
     f'<meta name="description" content="{DESCRIPTION}">'
@@ -102,8 +102,8 @@ def test_title_length_out_of_range_fails_and_reports_length(title):
 
 
 def test_title_entities_and_whitespace_are_normalised():
-    _, c = seo(seo_deps(html=page(head=GOOD_HEAD.replace(TITLE, "  Cakes &amp; Bakes\n  in Clarksville  "))))
-    assert c["seo_title"].data["length"] == len("Cakes & Bakes in Clarksville")
+    _, c = seo(seo_deps(html=page(head=GOOD_HEAD.replace(TITLE, "  Cakes &amp; Bakes\n  in Springfield  "))))
+    assert c["seo_title"].data["length"] == len("Cakes & Bakes in Springfield")
 
 
 # --- seo_description -------------------------------------------------------------
@@ -315,3 +315,11 @@ def test_seo_is_in_the_published_output_schema_and_description():
     tool = {t.name: t for t in asyncio.run(mcp.list_tools())}["health_check"]
     assert '"seo"' in str(tool.outputSchema).replace("'", '"')
     assert "seo_title" in tool.description
+
+
+def test_svg_title_elements_are_not_page_titles():
+    """Accessible inline SVG icons carry their own <title>; only the document title counts."""
+    body = GOOD_BODY + '<svg role="img"><title>Cart</title><path d="M0 0"/></svg><svg><title>Menu</title></svg>'
+    _, c = seo(seo_deps(html=page(body=body)))
+    assert c["seo_title"].status == "OK"
+    assert c["seo_title"].data["count"] == 1

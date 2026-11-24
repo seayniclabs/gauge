@@ -16,7 +16,7 @@ It is a **bundle**: tools, skills and instructions in one install. The tools are
 | Secrets | API keys and passwords come from your environment or config file. They are never tool arguments and never returned to the model. |
 | Read-only tools | 9: `umami_websites`, `umami_stats`, `umami_pageviews`, `umami_metrics`, `resend_emails`, `resend_domains`, `health_check (off by default)`, `health_sweep (off by default)`, `gauge_modules` |
 | Needs your approval | `resend_send`: you approve each send in your app, or pre-approve recipients in settings. The AI cannot approve for you. |
-| Startup cost | about 6,000 tokens with every module on (10 tools, 11 skill prompts) |
+| Startup cost | about 6,100 tokens with every module on (10 tools, 11 skill prompts) |
 | Changes | Tool descriptions are locked by hash (`tool-manifest.lock.json`); CI fails if they change silently. |
 <!-- security-card:end -->
 
@@ -25,7 +25,7 @@ It is a **bundle**: tools, skills and instructions in one install. The tools are
 |---|---|---|
 | `umami` | Web analytics from [Umami](https://umami.is), self-hosted or Umami Cloud: sites, totals, time series, top pages, referrers, countries, browsers | 0.1 |
 | `resend` | Email through [Resend](https://resend.com): send (preview first), list sent mail, list sending domains | 0.1 |
-| `health` | Site health: DNS, HTTP status and response time, TLS certificate and domain expiry, a must-appear page string, security headers, and opt-in AI-readiness checks. Fixed checks, no AI; each reads OK, FAILING or UNKNOWN. Needs no account. | new, **off by default** |
+| `health` | Site health: DNS, HTTP status and response time, TLS certificate and domain expiry, a must-appear page string, security headers, and opt-in SEO and AI-readiness checks. Fixed checks, no AI; each reads OK, FAILING or UNKNOWN. Needs no account. | new, **off by default** |
 
 Gauge works with any MCP client: Claude Desktop, Claude Code, Cursor, VS Code, Sonique, Hermes, OpenClaw and others. It runs on your computer and stores nothing; your data stays in Umami and Resend.
 
@@ -150,6 +150,7 @@ Paste one into your assistant once Gauge is set up:
 5. "Which of my Resend sending domains aren't verified yet, and what do I need to fix?"
 6. "Run a health sweep of my sites and tell me what's failing."
 7. "Is my homepage ready for AI search? Check crawler access and structured data."
+8. "Run the SEO checks on my homepage and tell me what to fix first."
 
 ## Tools
 
@@ -163,7 +164,7 @@ Paste one into your assistant once Gauge is set up:
 | `resend_send` | Sends an email after you approve it. Without `confirm=true` it only returns a preview. |
 | `resend_emails` | Sent emails, paged with a cursor |
 | `resend_domains` | Sending domains and whether each is verified |
-| `health_check` | One site: `dns`, `http` (status, response time, redirect chain), `tls` (days left), `domain` (days to renewal, via RDAP), `content` (is `expect_text` on the page) and `headers` (HSTS, nosniff, frame protection, referrer policy). `overall` combines all but `headers`. Opt-in AI readiness with `checks=["ai"]`: `robots_ai` (AI search crawlers allowed), `structured_data` (JSON-LD parses), `server_text` (text in the HTML, not only JavaScript), `llms_txt` (reported, not scored), rolled up into `ai_readiness`. |
+| `health_check` | One site: `dns`, `http` (status, response time, redirect chain), `tls` (days left), `domain` (days to renewal, via RDAP), `content` (is `expect_text` on the page) and `headers` (HSTS, nosniff, frame protection, referrer policy). `overall` combines all but `headers`. Opt-in AI readiness with `checks=["ai"]`: `robots_ai` (AI search crawlers allowed), `structured_data` (JSON-LD parses), `server_text` (text in the HTML, not only JavaScript), `llms_txt` (reported, not scored), rolled up into `ai_readiness`. Opt-in SEO with `checks=["seo"]`: `seo_title`, `seo_description`, `seo_indexable` (noindex, robots.txt), `seo_canonical`, `seo_sitemap`, `seo_basics` (lang, viewport, one H1, image alt) and `seo_social` (Open Graph), rolled up into `seo`. |
 | `health_sweep` | Every site in `GAUGE_HEALTH_TARGETS`, at most 25, with counts of OK / FAILING / UNKNOWN |
 
 Every tool returns structured data with a published schema, so an assistant can write code against the results instead of reading text. Date ranges take `days` (default 7) or ISO 8601 `start` and `end`. Errors always look like `gauge.<module>.<code>: <message> Fix: <hint>`.
