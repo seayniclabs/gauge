@@ -16,7 +16,7 @@ It is a **bundle**: tools, skills and instructions in one install. The tools are
 | Secrets | API keys and passwords come from your environment or config file. They are never tool arguments and never returned to the model. |
 | Read-only tools | 9: `umami_websites`, `umami_stats`, `umami_pageviews`, `umami_metrics`, `resend_emails`, `resend_domains`, `health_check (off by default)`, `health_sweep (off by default)`, `gauge_modules` |
 | Needs your approval | `resend_send`: you approve each send in your app, or pre-approve recipients in settings. The AI cannot approve for you. |
-| Startup cost | about 5,600 tokens with every module on (10 tools, 10 skill prompts) |
+| Startup cost | about 5,700 tokens with every module on (10 tools, 10 skill prompts) |
 | Changes | Tool descriptions are locked by hash (`tool-manifest.lock.json`); CI fails if they change silently. |
 <!-- security-card:end -->
 

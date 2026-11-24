@@ -69,3 +69,39 @@ def test_your_targets_report_a_state_for_every_check(url):
     r, c = check(url)
     print(url, r.overall, {k: (v.status, v.detail) for k, v in c.items()})
     assert all(v.status in ("OK", "FAILING", "UNKNOWN") for v in c.values())
+
+
+# --- AI readiness (AEO/GEO): good public reference plus a known-bad control for each check ----------------
+
+def test_ai_known_good_site():
+    r, c = check("https://www.python.org/", checks=["ai"])
+    assert c["robots_ai"].status == "OK"
+    assert c["structured_data"].status == "OK" and c["structured_data"].data["types"]
+    assert c["server_text"].status == "OK"
+    assert r.ai_readiness == "OK"
+
+
+def test_control_robots_blocks_ai_search_crawlers():
+    _, c = check("https://www.nytimes.com/", checks=["robots_ai"])
+    assert c["robots_ai"].status == "FAILING"
+    assert "OAI-SearchBot" in c["robots_ai"].data["blocked_search"]
+
+
+def test_control_no_structured_data_and_thin_html():
+    _, c = check("https://example.com/", checks=["structured_data", "server_text"])
+    assert c["structured_data"].status == "FAILING"
+    assert c["server_text"].status == "FAILING"
+
+
+def test_llms_txt_present_and_absent():
+    _, good = check("https://llmstxt.org/", checks=["llms_txt"])
+    _, bad = check("https://example.com/", checks=["llms_txt"])
+    assert good["llms_txt"].data["present"] is True
+    assert bad["llms_txt"].data["present"] is False
+
+
+def test_bot_blocked_page_is_not_scored():
+    # This site answers 403 to non-browser clients: the page checks must say UNKNOWN, not FAILING.
+    _, c = check("https://www.nytimes.com/", checks=["http", "server_text"])
+    if c["http"].data.get("status") == 403:
+        assert c["server_text"].status == "UNKNOWN"

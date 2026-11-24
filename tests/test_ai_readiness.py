@@ -182,3 +182,27 @@ def test_extra_fetches_obey_the_private_guard():
     _, c = ai(d)
     assert c["robots_ai"].status == "FAILING"
     assert "private" in c["robots_ai"].detail
+
+
+def test_ai_readiness_is_in_the_published_output_schema():
+    from gauge_mcp.config import Config
+    from gauge_mcp.server import build_server
+    mcp = build_server(Config(env={"GAUGE_HEALTH_ENABLED": "true"}, file_data={}), health_deps=ai_deps())
+    schema = {t.name: t for t in asyncio.run(mcp.list_tools())}["health_check"].outputSchema
+    assert "ai_readiness" in str(schema)
+
+
+def test_ai_readiness_is_null_when_only_llms_txt_ran():
+    r, _ = ai(checks=("llms_txt",))
+    assert r.ai_readiness is None
+
+
+@pytest.mark.parametrize("status", [403, 404, 503])
+def test_page_checks_are_unknown_when_the_page_is_not_a_2xx(status):
+    """Live finding 2026-11-24: a 403 bot-block page was scored as 'only 8 words'."""
+    d = deps({"https://example.com/": (status, GOOD_HEADERS, "<html><body>Access denied</body></html>"),
+              "https://example.com/robots.txt": (200, {}, ROBOTS_OPEN), "https://example.com/llms.txt": (404, {}, "")})
+    _, c = ai(d)
+    for name in ("structured_data", "server_text"):
+        assert c[name].status == "UNKNOWN"
+        assert str(status) in c[name].detail

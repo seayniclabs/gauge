@@ -21,7 +21,6 @@ import idna
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
-from pydantic.json_schema import SkipJsonSchema
 
 from ..config import Config
 from ..errors import GaugeError, not_configured
@@ -125,8 +124,8 @@ class Report(BaseModel):
     overall: Status
     headers: Status | None
     checks: list[CheckResult]
-    # Serialize the optional verdict while preserving the published health tool schema.
-    ai_readiness: SkipJsonSchema[Status | None] = None
+    # Combined verdict of the scored AI-readiness checks (robots_ai, structured_data, server_text); null if none ran.
+    ai_readiness: Status | None = None
 
 
 class Sweep(BaseModel):
@@ -379,7 +378,12 @@ async def _check_http(
             body, truncated = await _read_body(response, settings.max_body)
             if expect_text is not None:
                 results["content"] = _check_content(body, truncated, expect_text)
-            if page_checks:
+            if page_checks and not 200 <= response.status_code < 300:
+                # An error or bot-block page is not the page people see: don't score it.
+                for name in page_checks:
+                    results[name] = CheckResult(check=name, status="UNKNOWN",
+                                                detail=f"page answered {response.status_code}; not checked")
+            elif page_checks:
                 page = _PageHTML()
                 page.feed(body.decode("utf-8", errors="replace"))
                 page.close()
@@ -692,7 +696,8 @@ async def run_checks(
         return "FAILING" if "FAILING" in statuses else "UNKNOWN" if "UNKNOWN" in statuses else "OK"
 
     overall = verdict(set(CHECKS) - {"headers"})
-    ai_readiness = verdict(set(AI_CHECKS) - {"llms_txt"}) if selected.intersection(AI_CHECKS) else None
+    scored_ai = set(AI_CHECKS) - {"llms_txt"}
+    ai_readiness = verdict(scored_ai) if selected & scored_ai else None
     headers = results.get("headers")
     return Report(url=str(normalized), overall=overall, headers=headers.status if headers else None, checks=reported,
                   ai_readiness=ai_readiness)
@@ -763,7 +768,7 @@ class HealthModule(Module):
         async def health_check(
             url: str, expect_text: str | None = None, domain: str | None = None, checks: list[str] | None = None,
         ) -> Report:
-            """Check one site. Each check reports OK, FAILING or UNKNOWN (could not run). checks: any of dns, http, tls, domain, content, headers (default all; content needs expect_text). overall leaves out headers, which has its own verdict."""
+            """Check one site. Each check reports OK, FAILING or UNKNOWN (could not run). checks: any of dns, http, tls, domain, content, headers (default all; content needs expect_text). overall leaves out headers, which has its own verdict. Opt-in AI-readiness checks (AEO/GEO): robots_ai, structured_data, server_text, llms_txt, or "ai" for all four; they roll up into ai_readiness (llms_txt is reported, not scored) and never change overall."""
             return await run_checks(
                 url, deps=dependencies, settings=settings, expect_text=expect_text, domain=domain, checks=checks,
             )
