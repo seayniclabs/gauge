@@ -1,6 +1,6 @@
 ---
 name: getting-started
-description: Set up and check the Gauge MCP bundle (Umami analytics and Resend email). Use when the user installs Gauge, asks what Gauge can do, gets a "not_configured" or "auth_failed" error from a gauge tool, or wants to turn the analytics or email part on or off.
+description: Set up and check the Gauge MCP bundle (Umami analytics, Resend email, site health checks). Use when the user installs Gauge, asks what Gauge can do, gets a "not_configured" or "auth_failed" error from a gauge tool, or wants to turn the analytics, email or health part on or off.
 license: MIT
 source: https://github.com/seayniclabs/gauge
 author: Seaynic Labs
@@ -8,7 +8,7 @@ author: Seaynic Labs
 
 # Getting started with Gauge
 
-Gauge connects you to two services the user already has: Umami (website analytics) and Resend (email). Each is a module the user can switch off.
+Gauge connects you to two services the user already has, Umami (website analytics) and Resend (email), and can check a site's health (DNS, uptime, certificate and domain expiry, page text, security headers). Each is a module the user can switch on or off. The health module ships switched off and needs no account.
 
 ## 1. See what is ready
 
@@ -25,6 +25,8 @@ Settings go in the MCP app's `env` block, or in `~/.config/gauge/config.toml` (s
 | `GAUGE_RESEND_API_KEY` | Any Resend tool |
 | `GAUGE_RESEND_FROM` | Sending. Must be an address on a domain verified in Resend (check with `resend_domains`). |
 | `GAUGE_RESEND_ENABLED=false` | Turns email off entirely |
+| `GAUGE_HEALTH_ENABLED=true` | Turns on the site health checks (`health_check`, `health_sweep`) |
+| `GAUGE_HEALTH_TARGETS` | Comma-separated URLs that `health_sweep` checks |
 
 Tell the user to restart their MCP app after changing settings.
 
@@ -33,6 +35,7 @@ Tell the user to restart their MCP app after changing settings.
 1. `umami_websites`: lists their sites and each site's `id`. Every other Umami tool needs that `id`.
 2. `umami_stats` with that `id`: last 7 days of pageviews, visitors, visits and bounce rate.
 3. `resend_domains`: shows which sending domains are verified.
+4. `health_check` with the user's site address (health module on): every check reads OK, FAILING or UNKNOWN. Follow the `site-health-check` skill to read the result.
 
 ## 4. Sending email
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import tomllib
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 TRUE = {"1", "true", "yes", "on"}
 FALSE = {"0", "false", "no", "off"}
@@ -31,6 +31,14 @@ class Config:
             path = config_path(self.env)
             file_data = tomllib.loads(path.read_text()) if path.is_file() else {}
         self.file = file_data
+
+    def raw(self, module: str, key: str, default: Any = None) -> Any:
+        """Read a setting without converting TOML values to strings."""
+        value = self.env.get(f"GAUGE_{module.upper()}_{key.upper()}")
+        if value not in (None, ""):
+            return value
+        value = self.file.get(module, {}).get(key)
+        return default if value in (None, "") else value
 
     def get(self, module: str, key: str, default: str | None = None) -> str | None:
         value = self.env.get(f"GAUGE_{module.upper()}_{key.upper()}")

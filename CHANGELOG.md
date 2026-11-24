@@ -2,6 +2,15 @@
 
 Gauge follows [semantic versioning](https://semver.org). Modules added after 0.1 ship switched off.
 
+## 0.3.0 — 2026-11-24
+
+Change the pin to `gauge-mcp==0.3.0`. The new module is off until you set `GAUGE_HEALTH_ENABLED=true`.
+
+- New module `health`, **switched off by default** (`GAUGE_HEALTH_ENABLED=true`). `health_check` and `health_sweep` check DNS, HTTP status and response time (redirects followed and recorded), TLS certificate expiry, domain renewal date (RDAP), a must-appear page string and security headers. Each check reads OK, FAILING or UNKNOWN; no AI is involved. Private and local addresses are refused unless allowed in settings; page text and header values are never returned.
+- New skill `site-health-check`; `getting-started` covers the health module.
+- The tool lock and security card now include modules that ship switched off.
+- Tests no longer write to your real approval log.
+
 ## 0.2.1 — 2026-10-27
 
 **No code changes.** Change the pin to `gauge-mcp==0.2.1`.
