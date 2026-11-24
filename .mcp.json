@@ -3,7 +3,7 @@
     "gauge": {
       "command": "uvx",
       "args": [
-        "gauge-mcp==0.3.0"
+        "gauge-mcp==0.4.0"
       ]
     }
   }
