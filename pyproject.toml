@@ -12,6 +12,8 @@ dependencies = [
     "mcp[cli]>=1.27,<2",
     "httpx>=0.27",
     "pydantic>=2.7",
+    # health.py imports idna directly (UTS46 host normalising); it only arrived via httpx before.
+    "idna>=3.0",
 ]
 keywords = ["mcp", "model-context-protocol", "umami", "resend", "analytics", "email"]
 classifiers = [
