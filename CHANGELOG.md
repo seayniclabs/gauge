@@ -2,6 +2,13 @@
 
 Gauge follows [semantic versioning](https://semver.org). Modules added after 0.1 ship switched off.
 
+## 0.4.0 — 2026-11-24
+
+Change the pin to `gauge-mcp==0.4.0`. The AI-readiness checks run only when asked for (`checks=["ai"]`).
+
+- AI-readiness checks (AEO/GEO) in the `health` module, opt-in with `checks=["ai"]`: `robots_ai` (robots.txt lets OAI-SearchBot, PerplexityBot and Claude-SearchBot in; training crawlers are reported, not scored), `structured_data` (JSON-LD present and parses, with its types), `server_text` (at least 150 words in the HTML, not only built by JavaScript), `llms_txt` (reported, not scored). They roll up into a new `ai_readiness` verdict and never change `overall`. Pages that answer an error or block page are not scored. No AI is involved; whether AI tools cite a site stays a manual step in the `ai-seo` skill.
+- New skill `ai-seo` (Corey Haines, MIT).
+
 ## 0.3.0 — 2026-11-24
 
 Change the pin to `gauge-mcp==0.3.0`. The new module is off until you set `GAUGE_HEALTH_ENABLED=true`.

@@ -1,6 +1,6 @@
 ---
 name: site-health-check
-description: Check whether a website or web app is healthy with the Gauge health tools — DNS, uptime and response time, TLS certificate expiry, domain renewal date, a must-appear page string, and security headers. Use when the user asks "is my site up", "is it down", "check my site", "when does my certificate or domain expire", "run a health check or sweep", "check all my sites", or gets a FAILING or UNKNOWN result from health_check or health_sweep.
+description: Check whether a website or web app is healthy with the Gauge health tools — DNS, uptime and response time, TLS certificate expiry, domain renewal date, a must-appear page string, security headers, and opt-in AI-readiness (AEO/GEO) checks. Use when the user asks "is my site up", "is it down", "check my site", "when does my certificate or domain expire", "run a health check or sweep", "check all my sites", "is my site ready for AI search", or gets a FAILING or UNKNOWN result from health_check or health_sweep.
 license: MIT
 source: https://github.com/seayniclabs/gauge
 author: Seaynic Labs
@@ -63,7 +63,23 @@ Read these before concluding anything:
 - **One run is one moment.** A single FAILING `http` can be a blip; run it again before calling the site down. For alerts around the clock, use a monitor (such as Uptime Kuma). Gauge checks when asked.
 - **Gauge never returns page text or header values**, only found or missing. Never quote page content as if Gauge returned it.
 
-## 5. Report
+## 5. AI readiness (AEO/GEO): opt-in
+
+How a site can show up in AI answers (ChatGPT search, Perplexity, Claude, Google AI features). Run it with `checks=["ai"]` (all four) or by name. These checks never change `overall`; they roll up into `ai_readiness`.
+
+| Check | OK | FAILING | UNKNOWN |
+|---|---|---|---|
+| `robots_ai` | robots.txt lets the AI search crawlers (OAI-SearchBot, PerplexityBot, Claude-SearchBot) reach the page, or there is no robots.txt | it blocks one or more (named in `data.blocked_search`) | robots.txt couldn't be read |
+| `structured_data` | JSON-LD blocks parse; `data.types` lists their schema.org types | no JSON-LD, or a block is invalid JSON | page not fetched, or it answered an error or block page |
+| `server_text` | at least 150 words of text are in the HTML the server sends | fewer: the page is probably built by JavaScript, which many AI crawlers don't run | same as above |
+| `llms_txt` | `/llms.txt` exists | it doesn't | couldn't be read |
+
+- `llms_txt` is **reported, not scored**: no AI engine has confirmed it uses the file. Mention it; don't call a site broken without it.
+- Training crawlers (GPTBot, ClaudeBot, Google-Extended) are listed in `data.allowed` but never fail the check. Blocking training is the owner's choice, and it doesn't stop citations.
+- **These checks can't tell whether an AI actually cites the site.** That needs asking AI tools real questions, which is a separate, manual step in the `ai-seo` skill. Never present `ai_readiness: OK` as "AI tools recommend you".
+- For what to change after a FAILING result, use the `ai-seo` skill (structure, schema, crawler access) and `seo-audit` for classic search.
+
+## 6. Report
 
 ```
 <site>: <overall>

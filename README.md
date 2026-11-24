@@ -16,7 +16,7 @@ It is a **bundle**: tools, skills and instructions in one install. The tools are
 | Secrets | API keys and passwords come from your environment or config file. They are never tool arguments and never returned to the model. |
 | Read-only tools | 9: `umami_websites`, `umami_stats`, `umami_pageviews`, `umami_metrics`, `resend_emails`, `resend_domains`, `health_check (off by default)`, `health_sweep (off by default)`, `gauge_modules` |
 | Needs your approval | `resend_send`: you approve each send in your app, or pre-approve recipients in settings. The AI cannot approve for you. |
-| Startup cost | about 5,600 tokens with every module on (10 tools, 10 skill prompts) |
+| Startup cost | about 6,000 tokens with every module on (10 tools, 11 skill prompts) |
 | Changes | Tool descriptions are locked by hash (`tool-manifest.lock.json`); CI fails if they change silently. |
 <!-- security-card:end -->
 
@@ -25,20 +25,20 @@ It is a **bundle**: tools, skills and instructions in one install. The tools are
 |---|---|---|
 | `umami` | Web analytics from [Umami](https://umami.is), self-hosted or Umami Cloud: sites, totals, time series, top pages, referrers, countries, browsers | 0.1 |
 | `resend` | Email through [Resend](https://resend.com): send (preview first), list sent mail, list sending domains | 0.1 |
-| `health` | Site health: DNS, HTTP status and response time, TLS certificate and domain expiry, a must-appear page string, security headers. Fixed checks, no AI; each reads OK, FAILING or UNKNOWN. Needs no account. | new, **off by default** |
+| `health` | Site health: DNS, HTTP status and response time, TLS certificate and domain expiry, a must-appear page string, security headers, and opt-in AI-readiness checks. Fixed checks, no AI; each reads OK, FAILING or UNKNOWN. Needs no account. | new, **off by default** |
 
 Gauge works with any MCP client: Claude Desktop, Claude Code, Cursor, VS Code, Sonique, Hermes, OpenClaw and others. It runs on your computer and stores nothing; your data stays in Umami and Resend.
 
 ## Skills
 
-Skills are short guides your assistant reads before doing a job. Gauge ships 10, in two forms from one source: a `skills/` folder for apps that read Agent Skills (Claude Code and others), and MCP prompts for every other MCP app.
+Skills are short guides your assistant reads before doing a job. Gauge ships 11, in two forms from one source: a `skills/` folder for apps that read Agent Skills (Claude Code and others), and MCP prompts for every other MCP app.
 
 | Skill | What it covers | By |
 |---|---|---|
 | `getting-started` | Setup, first checks, fixing errors | Seaynic Labs |
 | `weekly-site-report` | A one-minute weekly traffic report from Umami | Seaynic Labs |
 | `site-health-check` | Running a health check or sweep and reading OK / FAILING / UNKNOWN | Seaynic Labs |
-| `analytics`, `seo-audit`, `copywriting`, `emails` | Tracking plans, SEO audits, page copy, email sequences | [Corey Haines](https://github.com/coreyhaines31/marketingskills), MIT |
+| `analytics`, `seo-audit`, `ai-seo`, `copywriting`, `emails` | Tracking plans, SEO audits, AI search (AEO/GEO), page copy, email sequences | [Corey Haines](https://github.com/coreyhaines31/marketingskills), MIT |
 | `resend`, `email-best-practices`, `react-email` | Sending with Resend, deliverability, HTML email | [Resend](https://github.com/resend/resend-skills), MIT |
 
 Third-party skills keep their licenses; see [CREDITS.md](CREDITS.md).
@@ -52,7 +52,7 @@ uvx gauge-mcp --version
 uvx gauge-mcp --doctor          # checks your settings and connections, prints fixes
 ```
 
-Pin the exact version if you want updates only when you choose them: `uvx gauge-mcp==0.3.0`.
+Pin the exact version if you want updates only when you choose them: `uvx gauge-mcp==0.4.0`.
 
 Or with pip:
 
@@ -149,6 +149,7 @@ Paste one into your assistant once Gauge is set up:
 4. "Audit the SEO of my top three pages and suggest new titles and descriptions."
 5. "Which of my Resend sending domains aren't verified yet, and what do I need to fix?"
 6. "Run a health sweep of my sites and tell me what's failing."
+7. "Is my homepage ready for AI search? Check crawler access and structured data."
 
 ## Tools
 
@@ -162,7 +163,7 @@ Paste one into your assistant once Gauge is set up:
 | `resend_send` | Sends an email after you approve it. Without `confirm=true` it only returns a preview. |
 | `resend_emails` | Sent emails, paged with a cursor |
 | `resend_domains` | Sending domains and whether each is verified |
-| `health_check` | One site: `dns`, `http` (status, response time, redirect chain), `tls` (days left), `domain` (days to renewal, via RDAP), `content` (is `expect_text` on the page) and `headers` (HSTS, nosniff, frame protection, referrer policy). `overall` combines all but `headers`. |
+| `health_check` | One site: `dns`, `http` (status, response time, redirect chain), `tls` (days left), `domain` (days to renewal, via RDAP), `content` (is `expect_text` on the page) and `headers` (HSTS, nosniff, frame protection, referrer policy). `overall` combines all but `headers`. Opt-in AI readiness with `checks=["ai"]`: `robots_ai` (AI search crawlers allowed), `structured_data` (JSON-LD parses), `server_text` (text in the HTML, not only JavaScript), `llms_txt` (reported, not scored), rolled up into `ai_readiness`. |
 | `health_sweep` | Every site in `GAUGE_HEALTH_TARGETS`, at most 25, with counts of OK / FAILING / UNKNOWN |
 
 Every tool returns structured data with a published schema, so an assistant can write code against the results instead of reading text. Date ranges take `days` (default 7) or ISO 8601 `start` and `end`. Errors always look like `gauge.<module>.<code>: <message> Fix: <hint>`.

@@ -12,8 +12,9 @@ It includes skills written by others, used under their licenses. Each skill fold
 | `analytics` | Corey Haines | MIT | [coreyhaines31/marketingskills @ 17772c7](https://github.com/coreyhaines31/marketingskills/tree/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/skills/analytics) |
 | `seo-audit` | Corey Haines | MIT | [coreyhaines31/marketingskills @ 17772c7](https://github.com/coreyhaines31/marketingskills/tree/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/skills/seo-audit) |
 | `copywriting` | Corey Haines | MIT | [coreyhaines31/marketingskills @ 17772c7](https://github.com/coreyhaines31/marketingskills/tree/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/skills/copywriting) |
+| `ai-seo` | Corey Haines | MIT | [coreyhaines31/marketingskills @ 17772c7](https://github.com/coreyhaines31/marketingskills/tree/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/skills/ai-seo) (added 2026-11-24) |
 | `emails` | Corey Haines | MIT | [coreyhaines31/marketingskills @ 17772c7](https://github.com/coreyhaines31/marketingskills/tree/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/skills/emails) |
 
-Skills by Seaynic Labs: `getting-started`, `weekly-site-report`.
+Skills by Seaynic Labs: `getting-started`, `weekly-site-report`, `site-health-check`.
 
 Thank you to Resend and Corey Haines for publishing these openly.
