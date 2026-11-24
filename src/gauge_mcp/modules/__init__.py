@@ -65,7 +65,8 @@ class Module:
 
 
 def all_modules() -> list[Module]:
+    from .health import HealthModule
     from .resend import ResendModule
     from .umami import UmamiModule
 
-    return [UmamiModule(), ResendModule()]
+    return [UmamiModule(), ResendModule(), HealthModule()]

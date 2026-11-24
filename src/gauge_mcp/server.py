@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from . import __version__
 from .config import Config, config_path
 from .modules import ClientFactory, Module, all_modules, default_client_factory
+from .modules.health import Deps, HealthModule
 from . import skills as skills_mod
 
 PUBLISHER = "Seaynic Labs"
@@ -21,6 +22,10 @@ INSTRUCTIONS = (
     "Call gauge_modules first: it says which modules are on, which settings are missing, and what each tool does. "
     "Skills (MCP prompts) explain how to do the job well; start with the getting-started prompt. "
     "Tools return structured results; errors read 'gauge.<module>.<code>: <message> Fix: <hint>'."
+)
+HEALTH_INSTRUCTIONS = (
+    " Site health checks (health_check, health_sweep) report OK, FAILING or UNKNOWN per check; "
+    "UNKNOWN means the check could not run, never that the site is fine."
 )
 
 
@@ -60,16 +65,23 @@ def build_server(
     config: Config | None = None,
     client_factory: ClientFactory = default_client_factory,
     modules: list[Module] | None = None,
+    health_deps: Deps | None = None,
     **settings,
 ) -> FastMCP:
     config = config or Config()
     modules = modules if modules is not None else all_modules()
-    mcp = FastMCP("gauge", instructions=INSTRUCTIONS, **settings)
+    enabled = [module for module in modules if config.enabled(module.name, module.default_enabled)]
+    instructions = INSTRUCTIONS
+    if any(module.name == "health" for module in enabled):
+        instructions += HEALTH_INSTRUCTIONS
+    mcp = FastMCP("gauge", instructions=instructions, **settings)
     # FastMCP 1.x reports the SDK's version unless the low-level server is told otherwise.
     mcp._mcp_server.version = __version__
 
-    for module in modules:
-        if config.enabled(module.name, module.default_enabled):
+    for module in enabled:
+        if isinstance(module, HealthModule):
+            module.register(mcp, config, client_factory, deps=health_deps)
+        else:
             module.register(mcp, config, client_factory)
 
     loaded_skills = skills_mod.register(mcp, "gauge")
