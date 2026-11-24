@@ -116,3 +116,26 @@ def test_bot_blocked_page_is_not_scored():
     _, c = check("https://www.nytimes.com/", checks=["http", "server_text"])
     if c["http"].data.get("status") == 403:
         assert c["server_text"].status == "UNKNOWN"
+
+
+# --- SEO: a known-good public page and a known-bad control for each check ----------------------------------
+
+def test_seo_known_good_checks():
+    _, c = check("https://github.com/", checks=["seo_indexable", "seo_canonical", "seo_sitemap", "seo_basics", "seo_social"])
+    assert {k: v.status for k, v in c.items() if k.startswith("seo_")} == dict.fromkeys(
+        ["seo_indexable", "seo_canonical", "seo_sitemap", "seo_basics", "seo_social"], "OK")
+    _, p = check("https://www.python.org/", checks=["seo_title", "seo_description"])
+    assert p["seo_title"].status == "OK" and p["seo_description"].status == "OK"
+
+
+def test_control_seo_bare_page():
+    _, c = check("https://example.com/", checks=["seo"])
+    for name in ("seo_description", "seo_canonical", "seo_sitemap", "seo_basics", "seo_social"):
+        assert c[name].status == "FAILING", name
+
+
+def test_control_seo_blocked_from_search_and_short_title():
+    _, c = check("https://www.google.com/search", checks=["seo_indexable", "seo_title"])
+    assert c["seo_indexable"].status == "FAILING"
+    assert c["seo_indexable"].data["robots_allows"] is False
+    assert c["seo_title"].status == "FAILING"

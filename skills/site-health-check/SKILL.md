@@ -1,6 +1,6 @@
 ---
 name: site-health-check
-description: Check whether a website or web app is healthy with the Gauge health tools — DNS, uptime and response time, TLS certificate expiry, domain renewal date, a must-appear page string, security headers, and opt-in AI-readiness (AEO/GEO) checks. Use when the user asks "is my site up", "is it down", "check my site", "when does my certificate or domain expire", "run a health check or sweep", "check all my sites", "is my site ready for AI search", or gets a FAILING or UNKNOWN result from health_check or health_sweep.
+description: Check whether a website or web app is healthy with the Gauge health tools — DNS, uptime and response time, TLS certificate expiry, domain renewal date, a must-appear page string, security headers, and opt-in SEO and AI-readiness (AEO/GEO) checks. Use when the user asks "is my site up", "is it down", "check my site", "when does my certificate or domain expire", "run a health check or sweep", "check all my sites", "is my site ready for AI search", "check my SEO", or gets a FAILING or UNKNOWN result from health_check or health_sweep.
 license: MIT
 source: https://github.com/seayniclabs/gauge
 author: Seaynic Labs
@@ -79,7 +79,26 @@ How a site can show up in AI answers (ChatGPT search, Perplexity, Claude, Google
 - **These checks can't tell whether an AI actually cites the site.** That needs asking AI tools real questions, which is a separate, manual step in the `ai-seo` skill. Never present `ai_readiness: OK` as "AI tools recommend you".
 - For what to change after a FAILING result, use the `ai-seo` skill (structure, schema, crawler access) and `seo-audit` for classic search.
 
-## 6. Report
+## 6. SEO: opt-in
+
+Classic search basics, checked from one fetch of the page plus robots.txt and the sitemap. Run them with `checks=["seo"]` (all seven) or by name. They never change `overall`; they roll up into `seo`.
+
+| Check | FAILING when |
+|---|---|
+| `seo_title` | no `<title>`, more than one, or not 10–65 characters (`data.length`) |
+| `seo_description` | no meta description, or not 50–160 characters |
+| `seo_indexable` | the page says `noindex` (meta tag or `X-Robots-Tag`), or robots.txt blocks Googlebot from it. UNKNOWN if robots.txt can't be read |
+| `seo_canonical` | no canonical link, or it points to another host. `data.self` says whether it points at this page |
+| `seo_sitemap` | no sitemap (robots.txt `Sitemap:` lines, else `/sitemap.xml`), or it isn't valid sitemap XML |
+| `seo_basics` | `data.missing` names: `lang`, `viewport`, `one-h1` (exactly one H1), `img-alt` (images with no alt attribute; `alt=""` is fine for decorative images) |
+| `seo_social` | `og:title`, `og:description` or `og:image` missing |
+
+- Title and description lengths are guidance from how search results display, not rules. Say "Google will likely cut this title off", not "this page is broken".
+- These read the HTML the server sends. A plugin that adds tags with JavaScript won't show here; if the user says a tag is there, check the page source before arguing.
+- Gauge never returns the title, description or canonical URL text, only lengths and yes/no. To suggest a new title, read the page yourself or ask the user.
+- For what to change, use the `seo-audit` skill.
+
+## 7. Report
 
 ```
 <site>: <overall>
