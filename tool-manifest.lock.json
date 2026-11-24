@@ -3,6 +3,7 @@
   "version": "0.3.0",
   "entries": {
     "instructions": "f1a6f3f51da62ef0a695c9a34666571193b63ec293ec9fd3725fefa30bd9e211",
+    "prompt:ai-seo": "2379737bb4d04fc3301442897ea9bcf99884e50a1d768efce1816b46ce1b6c73",
     "prompt:analytics": "6f5888f0265843b75d4f3b8558b9ce2c687fd0b72fa3b5e78c7006b26c975ce7",
     "prompt:copywriting": "a0f799ecfb44b512c7047044530da248b27b9eda4c7630f82100326cead6d9c5",
     "prompt:email-best-practices": "8d4df4c80dab8342d2956379461994c8ffbece138cc1a58004206ba2fb1c84c1",
@@ -11,7 +12,7 @@
     "prompt:react-email": "3e7e662d763a3fb2b458731ebdaa5a32a1c2276b506f093cdb0ae7824c2a3a5d",
     "prompt:resend": "ced1b3f1bed1fd32a21475dc59b3e8e086192d288ee064a769aa7f2c688e4160",
     "prompt:seo-audit": "9e316203cc598f32bbeaebbe2663e926fe5e519dfc39873b33c0f40aea10c073",
-    "prompt:site-health-check": "33d7493cc932e6c2f2b775749dacbdff71de29eb7e593e96bfa30e999ea926bc",
+    "prompt:site-health-check": "6f668ebc300b814abbbd050fb0e9e8b0c03806a52f72606da8ec925b01a11ed6",
     "prompt:weekly-site-report": "7a893e35f993a1bdf534ec9e4d955681e2c7afc0257732bf6d6839050f0bd6af",
     "tool:gauge_modules": "29b95b71c972de43d5e326c057ad2b865f1adb099fd6c84306f18f50eba53d1b",
     "tool:health_check": "787ca0b26cc25bb6f88849bd6a11d959f6c1ef18bc139b2e647dc20c8037a501",

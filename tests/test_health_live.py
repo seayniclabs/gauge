@@ -14,6 +14,12 @@ from gauge_mcp.modules import health as H
 pytestmark = pytest.mark.skipif(os.environ.get("GAUGE_LIVE") != "1", reason="live network test; set GAUGE_LIVE=1")
 
 
+def reachable(c, name):
+    """A control proves something only if its host answered; otherwise skip and say why."""
+    if c["http"].status == "FAILING" and c["http"].detail.startswith("Connect"):
+        pytest.skip(f"control host for {name} unreachable right now ({c['http'].detail})")
+
+
 def check(url, **kw):
     report = asyncio.run(H.run_checks(url, deps=H.Deps.real(), settings=H.Settings(), **kw))
     return report, {c.check: c for c in report.checks}
@@ -35,11 +41,15 @@ def test_control_dns_dead_host():
 
 def test_control_tls_expired():
     _, c = check("https://expired.badssl.com/")
+    if c["tls"].status == "UNKNOWN":
+        pytest.skip("expired.badssl.com did not accept a connection right now")
     assert c["tls"].status == "FAILING"
 
 
 def test_control_tls_wrong_host():
     _, c = check("https://wrong.host.badssl.com/")
+    if c["tls"].status == "UNKNOWN":
+        pytest.skip("wrong.host.badssl.com did not accept a connection right now")
     assert c["tls"].status == "FAILING"
 
 
@@ -50,6 +60,7 @@ def test_control_content_missing_string():
 
 def test_control_headers_on_plain_http_site():
     _, c = check("http://neverssl.com/")
+    reachable(c, "headers")
     assert c["headers"].status == "FAILING"
 
 

@@ -1,4 +1,4 @@
-"""AI-readiness checks (AEO/GEO; Charlie decision #1363): robots_ai, structured_data, server_text, llms_txt.
+"""AI-readiness checks (AEO/GEO): robots_ai, structured_data, server_text, llms_txt.
 
 They run only when asked (checks=[...] or the "ai" shorthand), never change `overall`, and roll up into their own
 `ai_readiness` verdict, which leaves out llms_txt (reported, not scored). No network: see test_health.py helpers.
