@@ -2,7 +2,9 @@
 
 Gauge follows [semantic versioning](https://semver.org). Modules added after 0.1 ship switched off.
 
-## Unreleased
+## 0.5.0 — 2026-11-24
+
+Change the pin to `gauge-mcp==0.5.0`. The SEO checks run only when asked for (`checks=["seo"]`).
 
 - SEO checks in the `health` module, opt-in with `checks=["seo"]`: `seo_title`, `seo_description`, `seo_indexable` (noindex in a meta tag or `X-Robots-Tag`, robots.txt for Googlebot), `seo_canonical`, `seo_sitemap` (from robots.txt or `/sitemap.xml`; DOCTYPE and entities are never expanded), `seo_basics` (lang, viewport, exactly one H1, images with no alt) and `seo_social` (Open Graph). They roll up into a new `seo` verdict and never change `overall`. Page text is never returned, only lengths and yes/no. robots.txt is now fetched once per check and shared.
 
